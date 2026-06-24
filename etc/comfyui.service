@@ -1,0 +1,17 @@
+[Unit]
+Description=ComfyUI Image Generation
+After=network-online.target
+
+[Service]
+Type=simple
+User=vllm
+Group=vllm
+WorkingDirectory=/mnt/llm/ComfyUI
+ExecStart=/usr/local/sbin/start-comfy
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/comfyui/stdio.log
+StandardError=append:/var/log/comfyui/error.log
+
+[Install]
+WantedBy=multi-user.target

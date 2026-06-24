@@ -1,0 +1,5 @@
+# Ollama models to initially download, one per line:
+gemma4:e4b
+glm-5.2:cloud
+qwen3:8b
+qwen3.5:35b

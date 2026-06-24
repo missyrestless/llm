@@ -1,0 +1,43 @@
+#!/bin/bash
+#
+DEF_MODEL="qwen3-coder:30b"
+MODEL=
+
+export ANTHROPIC_BASE_URL="http://localhost:11434"
+export ANTHROPIC_AUTH_TOKEN="ollama"
+export CLAUDE_CODE_ATTRIBUTION_HEADER=0
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+
+usage() {
+  printf "\nUsage: config-claude [-m model] [-h|-u]"
+  printf "\nWhere:"
+  printf "\n\t-m model specifies a model name [Default: ${DEF_MODEL}]"
+  printf "\n\t-h or -u displays this usage message and exits\n"
+  exit 1
+}
+
+while getopts ":m:hu" flag; do
+  case $flag in
+    m)
+      MODEL="$OPTARG"
+      ;;
+    h|u)
+      usage
+      ;;
+    \?)
+      echo "Invalid option: $flag"
+      usage
+      ;;
+  esac
+done
+shift $(( OPTIND - 1 ))
+
+[ "${MODEL}" ] || MODEL="${DEF_MODEL}"
+
+have_oll=$(type -p ollama)
+if [ "${have_oll}" ]; then
+  ollama launch claude --config --model "${MODEL}"
+else
+  echo "ERROR: cannot locate ollama command"
+  exit 1
+fi

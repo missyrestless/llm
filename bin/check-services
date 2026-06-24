@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+BOLD=$(tput bold 2> /dev/null)
+NORM=$(tput sgr0 2> /dev/null)
+
+printf "\nChecking Open WebUI services' status"
+printf "\n------------------------------------\n"
+for script in nginx comfyui lmstudio ollama openwebui openterminal vllm
+do
+  [ -f /lib/systemd/system/${script}.service ] || continue
+  systemctl is-active ${script}.service >/dev/null 2>&1 && \
+    active='\e[0;32m\033[1mactive\e[0m' || active='\e[0;31m\033[1minactive\e[0m'
+  systemctl is-enabled ${script}.service >/dev/null 2>&1 && \
+    enabled='\e[0;32m\033[1menabled\e[0m' || enabled='\e[0;33m\033[1mdisabled\e[0m'
+  if [ "${script}" == "vllm" ]; then
+    printf "\n\t${BOLD}${script}${NORM}:  \t\t${active} and ${enabled}"
+  else
+    printf "\n\t${BOLD}${script}${NORM}:  \t${active} and ${enabled}"
+  fi
+done
+printf "\n\n"

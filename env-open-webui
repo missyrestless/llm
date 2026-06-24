@@ -1,0 +1,108 @@
+# =========================================================================
+# OPEN WEBUI ENVIRONMENT CONFIGURATION
+# =========================================================================
+
+# --- Core Connection Settings ---
+PORT=6000
+HOST="127.0.0.1"
+WEBUI_URL="http://127.0.0.1:6000"
+
+# --- Ollama API ---
+ENABLE_OLLAMA_API=__ENABLE_OLLAMA_API__
+
+# --- Ollama Backend Connection ---
+OLLAMA_BASE_URL="http://localhost:11434"
+
+# --- OpenAI API Connection ---
+OPENAI_API_BASE_URL=https://openai.neoman.dev/v1
+OPENAI_API_KEY=__OPENAI_API_KEY__
+
+# --- Reuse the OpenAI API key for vLLM
+VLLM_API_KEY=__OPENAI_API_KEY__
+
+# --- User Account & Security Permissions ---
+# Options: pending (admin must approve), user (auto-activate), admin (auto-admin)
+DEFAULT_USER_ROLE="user"
+ENABLE_SIGNUP=False
+ENABLE_LOGIN_FORM=True
+ENABLE_PASSWORD_AUTH=True
+
+# --- Password Validation ---
+ENABLE_PASSWORD_VALIDATION=True
+PASSWORD_VALIDATION_REGEX_PATTERN='^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$'
+PASSWORD_VALIDATION_HINT='Minimum 8 characters with uppercase, lowercase, number, and special character.'
+
+# --- Okta Authentication and Group Access Management ---
+# https://docs.openwebui.com/tutorials/auth-sso/okta-oidc-sso/
+#
+# Enable OAuth/OIDC Framework
+ENABLE_OAUTH_SIGNUP=False
+# Scopes to request (default is usually sufficient)
+# OAUTH_SCOPES="openid email profile groups" # Ensure 'groups' is included if not default
+
+# --- OAuth Group Management (Optional) ---
+# Set to True only if you configured the Groups Claim in Okta
+# and want Open WebUI groups to be managed based on Okta groups upon login.
+# This syncs existing groups. Users will be added/removed from Open WebUI groups
+# to match their Okta group claims.
+# ENABLE_OAUTH_GROUP_MANAGEMENT=False
+
+# Required only if ENABLE_OAUTH_GROUP_MANAGEMENT is true.
+# The claim name in the ID token containing group information (must match Okta config)
+# OAUTH_GROUP_CLAIM="groups"
+
+# Optional: Enable Just-in-Time (JIT) creation of groups if they exist in Okta claims but not in Open WebUI.
+# Requires ENABLE_OAUTH_GROUP_MANAGEMENT=True.
+# If set to false (default), only existing groups will be synced.
+# ENABLE_OAUTH_GROUP_CREATION=False
+# Display text on the login button
+# OAUTH_PROVIDER_NAME="Okta"
+# Optional Account Merging
+# Maps Okta logins automatically to existing local accounts with matching emails
+# OAUTH_MERGE_ACCOUNTS_BY_EMAIL=False
+# Access roles in Open WebUI managed through Okta groups
+# ENABLE_OAUTH_GROUP_MANAGEMENT=False
+# ENABLE_OAUTH_GROUP_CREATION=False
+
+# --- Feature Toggles ---
+ENABLE_RAG=True
+ENABLE_WEB_SEARCH=True
+
+# --- Privacy & Telemetry ---
+SCARF_NO_ANALYTICS=True
+DO_NOT_TRACK=True
+ANONYMIZED_TELEMETRY=False
+
+# --- Dynamic Configuration Behavior ---
+# If false, settings are strict and cannot be modified permanently via the admin UI
+ENABLE_PERSISTENT_CONFIG=False
+
+# --- Set one or more of the default model parameters ---
+DEFAULT_MODEL_PARAMS='{"function_calling":"native"}'
+
+# --- Enables or disables image generation features ---
+ENABLE_IMAGE_GENERATION=True
+
+# --- Specifies the engine to use for image generation ---
+IMAGE_GENERATION_ENGINE="comfyui"
+
+# --- Terminal Server Connections ---
+# Define Open Terminal integrations here
+TERMINAL_SERVER_CONNECTIONS='[{"id": "terminal-server","url": "https://openwebui.neoman.dev/terminal","key": "__TERMINAL_API_KEY__","name": "Open Terminal","auth_type": "bearer","config": {"access_grants": []}}]'
+
+# --- Tool Server integrations do not persist through the web UI ---
+# Define tool servers and MCP server integrations here
+#
+# TOOL_SERVER_CONNECTIONS='[{"type":"mcp","url":"https://mcp.neoman.dev/mcp","spec_type":"url","spec":"","path":"openapi.json","auth_type":"system_oauth","key":"","config":{"enable":true},"info":{"id":"mcp","name":"MCP","description":"Placeholdeer for mcp server via Model Context Protocol"}}]'
+
+# --- Cross-Origin Resource Sharing (CORS) policy ---
+CORS_ALLOW_ORIGIN="http://localhost:6000;https://mcp.neoman.dev:8443;https://openwebui.neoman.dev;https://mcp.neoman.dev"
+
+# --- ComfyUI Base URL ---
+COMFYUI_BASE_URL="https://openwebui.neoman.dev/image"
+
+# User Agent
+USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+
+# --- Secret Key ---
+# Leave this as the last line

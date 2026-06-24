@@ -1,0 +1,26 @@
+The following ports are used by the specified services:
+
+80/443 - Nginx server
+6000   - Open WebUI server
+8000   - vLLM with Qwen/Qwen2.5-7B-Instruct
+8188   - ComfyUI image generation
+9000   - Open Terminal
+11434  - Ollama server
+
+Not yet deployed:
+
+8002   - Second vLLM server
+10000  - Llama.cpp
+18789  - OpenClaw
+
+LlamaIndex typical ports
+------------------------
+  - Workflows (LlamaIndex Server):
+      Workflows typically start on 80 or 8080 by default, depending on the implementation version
+  - LlamaParse Server:
+      Runs locally on port 5000
+  - LlamaIndex MCP Server:
+      Served on port 8000
+  - Vector Stores:
+      When connecting LlamaIndex to local vector databases, it uses their standard ports
+      (e.g., Weaviate on 8080, Qdrant on 6333, or Vespa on 8080)

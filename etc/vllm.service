@@ -1,0 +1,25 @@
+[Unit]
+Description=vLLM OpenAI-Compatible Server
+After=network-online.target nvidia-persistenced.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vllm
+Group=vllm
+WorkingDirectory=/home/vllm
+EnvironmentFile=/etc/vllm/env
+ExecStart=/usr/local/sbin/start-vllm
+
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=600
+TimeoutStopSec=60
+LimitNOFILE=1048576
+
+StandardOutput=append:/var/log/vllm/stdio.log
+StandardError=append:/var/log/vllm/error.log
+SyslogIdentifier=vllm
+
+[Install]
+WantedBy=multi-user.target

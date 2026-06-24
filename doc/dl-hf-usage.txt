@@ -1,0 +1,21 @@
+Usage: dl-hf [-b] [-c] [-d /path/to/models]
+             [-h] [-m|M] [-p model_path] [-q] [-u]
+Where:
+  -b indicates download Qwen/Qwen3-0.6B model
+  -c indicates download deepseek-ai/DeepSeek-V4-Pro model
+  -d /path/to/models specifies the download folder
+  -h displays huggingface cli download help and exits
+  -m indicates download Qwen/Qwen2.5-7B-Instruct model
+  -M indicates download google/gemma-4-31B model
+  -p model_path specifies the Huggingface path to model
+  -q indicates quiet mode
+  -u displays this usage message and exits
+Without arguments, download the default model: Qwen/Qwen3.6-27B
+Defaults:
+  Download directory = /usr/local/share/models
+  Model path = Qwen/Qwen3.6-27B
+Examples:
+  # Download OpenAI gpt-oss-20b to the default model download directory
+  dl-hf -p openai/gpt-oss-20b
+  # Download the Qwen/Qwen3-0.6B model to /tmp
+  dl-hf -b -d /tmp

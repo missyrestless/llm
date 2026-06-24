@@ -1,0 +1,44 @@
+#!/bin/bash
+
+http=80
+https=443     # Nginx server
+webui=6000    # Open WebUI server
+vllm=8000     # vLLM with Qwen/Qwen2.5-7B-Instruct
+comfy=8188    # ComfyUI image generation
+ollama=11434  # Ollama server
+qwen=8001     # vLLM with Qwen/Qwen3.6-27B 
+
+echo "---------------"
+echo "HTTP on port 80"
+echo "---------------"
+sudo lsof -i :${http}
+echo ""
+echo "-----------------"
+echo "HTTPS on port 443"
+echo "-----------------"
+sudo lsof -i :${https}
+echo ""
+echo "-----------------------"
+echo "Open WebUI on port 6000"
+echo "-----------------------"
+sudo lsof -i :${webui}
+echo ""
+echo "-----------------"
+echo "vLLM on port 8000"
+echo "-----------------"
+sudo lsof -i :${vllm}
+echo ""
+echo "--------------------"
+echo "ComfyUI on port 8188"
+echo "--------------------"
+sudo lsof -i :${comfy}
+echo ""
+echo "--------------------"
+echo "Ollama on port 11434"
+echo "--------------------"
+sudo lsof -i :${ollama}
+echo ""
+echo "------------------"
+echo "vLLM2 on port 8001"
+echo "------------------"
+sudo lsof -i :${qwen}

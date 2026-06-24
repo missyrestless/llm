@@ -1,0 +1,17 @@
+[Unit]
+Description=LM Studio Server
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=vllm
+Environment="HOME=/home/vllm"
+ExecStartPre=/home/vllm/.lmstudio/bin/lms daemon up
+ExecStartPre=/home/vllm/.lmstudio/bin/lms load openai/gpt-oss-20b --yes
+ExecStart=/home/vllm/.lmstudio/bin/lms server start
+ExecStop=/home/vllm/.lmstudio/bin/lms daemon down
+StandardOutput=append:/var/log/lmstudio/stdio.log
+StandardError=append:/var/log/lmstudio/error.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,34 @@
+#!/bin/bash
+#
+export HOME="/home/terminal"
+
+TERM_ENV="${HOME}/env"
+
+PYENV_ROOT="/mnt/llm/.venv"
+export PATH="${PYENV_ROOT}/bin:${PATH}"
+
+if [ -r ${TERM_ENV} ]; then
+  source ${TERM_ENV}
+else
+  echo "ERROR: cannot read Open WebUI environment file"
+  exit 1
+fi
+
+source ${PYENV_ROOT}/bin/activate
+
+export PATH="${HOME}/.local/bin:${PATH}"
+
+have_ot=$(type -p open-terminal)
+if [ "${have_ot}" ]; then
+  cd ${HOME}
+  open-terminal run \
+    --host 127.0.0.1 \
+    --port 9000 \
+    --api-key ${TERMINAL_API_KEY} \
+    --cwd ${HOME} \
+    --cors-allowed-origins \
+    "http://localhost,https://openai.neoman.dev,https://openwebui.neoman.dev,https://mcp.neoman.dev"
+else
+  echo "ERROR: cannot locate open-terminal command"
+  exit 1
+fi

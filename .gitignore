@@ -216,3 +216,37 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# credentials, secrets, certs
+creds
+oauth
+etc/nginx/ssl/*
+etc/nginx/users
+etc/nginx/ollama.users
+private
+
+# Huggingface access token
+.hf_token
+
+# Secrets
+.secrets
+
+# Open WebUI secret key
+.webui_secret_key
+
+# Distribution archive
+llm*.tar.gz
+
+# dirs
+logs/*
+tmp
+
+# backups
+*.00
+
+# vim files
+.*.sw[a-z]
+*.un~
+Session.vim
+.netrwhist
+.DS_Store

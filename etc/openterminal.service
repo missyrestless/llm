@@ -1,0 +1,18 @@
+[Unit]
+Description=Open Terminal
+After=network-online.target
+
+[Service]
+Type=simple
+User=terminal
+Group=terminal
+WorkingDirectory=/home/terminal
+EnvironmentFile=/home/terminal/env
+ExecStart=/usr/local/sbin/run-open-terminal
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/openterminal/stdio.log
+StandardError=append:/var/log/openterminal/error.log
+
+[Install]
+WantedBy=multi-user.target

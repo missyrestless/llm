@@ -1,0 +1,112 @@
+upstream terminal_backend {
+    server 127.0.0.1:9000;
+    keepalive 64;
+}
+
+upstream comfy_backend {
+    server 127.0.0.1:8188;
+    keepalive 64;
+}
+
+server {
+    listen 80;
+    server_name openwebui.neoman.dev;
+
+    # Redirect to HTTPS
+    if ($http_x_forwarded_proto != "https") {
+        return 301 https://$server_name$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name openwebui.neoman.dev;
+
+    ssl_certificate /etc/letsencrypt/live/openwebui.neoman.dev/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/openwebui.neoman.dev/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # Basic authentication
+    # auth_basic "Open WebUI";
+    # auth_basic_user_file /etc/nginx/.htpasswd;
+
+    client_max_body_size 100M; # Required for heavy document/model uploads
+
+    location / {
+        access_log /var/log/nginx/openwebui-access.log;
+        error_log  /var/log/nginx/openwebui-error.log;
+
+        # Forward requests to internal Open WebUI port (Default is 8080)
+        proxy_pass http://127.0.0.1:6000;
+
+        # Standard Proxy Headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # CRITICAL: Enable WebSockets (Fixes chat session freezes)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_cache_bypass $http_upgrade;
+
+        # CRITICAL: Disable Buffering (Fixes garbled markdown & broken LLM streaming)
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_request_buffering off;
+
+        # Timeouts for long LLM generations
+        proxy_read_timeout 1800s;
+        proxy_send_timeout 1800s;
+        proxy_connect_timeout 1800s;
+    }
+
+    location /image/ {
+        access_log /var/log/nginx/ComfyUI-access.log;
+        error_log  /var/log/nginx/ComfyUI-error.log;
+
+        proxy_pass http://comfy_backend/;
+        
+        # Core Proxy Headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket Support (Crucial for Terminal I/O)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+
+        # Timeouts to keep long-running terminal connections active
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+        keepalive_timeout 86400;
+    }
+
+    location /terminal/ {
+        access_log /var/log/nginx/openterminal-access.log;
+        error_log  /var/log/nginx/openterminal-error.log;
+
+        # Assuming Open Terminal runs on localhost port 9000
+        proxy_pass http://terminal_backend/;
+        
+        # Core Proxy Headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket Support (Crucial for Terminal I/O)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+
+        # Timeouts to keep long-running terminal connections active
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+        keepalive_timeout 86400;
+    }
+}

@@ -1,0 +1,133 @@
+#!/bin/bash
+
+SCRIPT_PATH="$(
+  cd "$(dirname "$0")"
+  pwd -P
+)"
+have_real=$(type -p realpath)
+[ "${have_real}" ] && SCRIPT_PATH="$(realpath $SCRIPT_PATH)"
+
+cd "${SCRIPT_PATH}"
+
+[ -f VERSION ] || {
+    echo "VERSION file missing. Exiting."
+    exit 1
+}
+. ./VERSION
+
+usage() {
+    printf "\nUsage: mkrelease [-d] [-u]"
+    printf "\nWhere:"
+    printf "\n\t-d indicates create draft release"
+    printf "\n\t-u displays this usage message and exits\n"
+    exit 1
+}
+
+DRAFT=
+while getopts "du" flag; do
+    case $flag in
+        d)
+            DRAFT="--draft"
+            ;;
+        u)
+            usage
+            ;;
+    esac
+done
+shift $(( OPTIND - 1 ))
+
+export PATH="$HOME/.local/bin:${PATH}"
+have_tea=$(type -p tea)
+[ "${have_tea}" ] || {
+  printf "\n\nThe required tea Gitea CLI binary cannot be located\n"
+  have_wget=$(type -p wget)
+  [ "${have_wget}" ] || {
+    printf "\nwget is required to install tea."
+    printf "\nExiting. No tags or release created.\n"
+    exit 1
+  }
+  while true; do
+    read -r -p "Would you like to install tea now ? (y/n) " yn
+    case $yn in
+      [Yy]*)
+          VER="main"
+	  plat=$(uname -s)
+	  mach=$(uname -m)
+	  if [ "${plat}" == "Darwin" ]; then
+            os="darwin"
+	  else
+            os="linux"
+	  fi
+	  case ${mach} in
+            x86_64|X86_64)
+              arch=amd64
+              ;;
+            arm*)
+              arch=arm64
+              ;;
+            *)
+              echo "Unsupported architecture. Exiting."
+	      exit 1
+              ;;
+          esac
+          DL_URL="https://dl.gitea.com/tea/${VER}/tea-${VER}-${os}-${arch}"
+          BINDIR="${HOME}/.local/bin"
+
+          [ -d "${HOME}/.local" ] || mkdir -p "${HOME}/.local"
+          [ -d "${HOME}/.local/bin" ] || mkdir -p "${HOME}/.local/bin"
+
+          wget --quiet -O "${BINDIR}/tea" "${DL_URL}" >/dev/null 2>&1
+          chmod 755 "${BINDIR}/tea"
+          printf "\nTea release binary installed as ${BINDIR}/tea\n"
+          break
+          ;;
+      [Nn]*)
+          printf "\nExiting. No tags or release created.\n"
+          exit 1
+          ;;
+        *)
+          printf "\nPlease answer yes or no.\n"
+          ;;
+    esac
+  done
+}
+
+dup=
+while read relver
+do
+  [ "${relver}" == "v${VERSION}r${RELEASE}" ] && {
+    dup=1
+    break
+  }
+done < <(tea release list -o simple | awk ' { print $1 } ')
+
+[ "${dup}" ] && {
+  printf "\nA release already exists for version ${VERSION} release ${RELEASE}"
+  printf "\nEdit the VERSION file and bump the version or release number"
+  printf "\nExiting. No tags or release created.\n"
+  exit 1
+}
+
+[ -x ./mkdist ] || {
+  echo "ERROR: missing mkdist"
+  exit 1
+}
+./mkdist
+
+[ -f mcp-${VERSION}-${RELEASE}.tar.gz ] || {
+  echo "ERROR: missing mcp-${VERSION}-${RELEASE}.tar.gz"
+  exit 1
+}
+
+ANNO="Ollama, MCP, Open WebUI Setup Version ${VERSION}r${RELEASE}"
+gittag v${VERSION}r${RELEASE} ${ANNO}
+
+echo "Creating release for version ${VERSION} release ${RELEASE}"
+
+NOTES=$(cat ReleaseNotes.md)
+tea release create --asset mcp-${VERSION}-${RELEASE}.tar.gz \
+                   --note "${NOTES}" \
+                   --tag "v${VERSION}r${RELEASE}" \
+                   --title "${ANNO}"
+
+git fetch --tags origin

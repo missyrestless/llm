@@ -1,0 +1,19 @@
+[Unit]
+Description=Open WebUI
+After=network-online.target
+
+[Service]
+Type=simple
+User=vllm
+Group=vllm
+WorkingDirectory=/etc/open-webui
+EnvironmentFile=/etc/open-webui/env
+ExecStart=/usr/local/sbin/start-open-webui
+Restart=always
+RestartSec=5
+# Options include: journal, null, file:/path/to/file, append:/path/to/file, syslog
+StandardOutput=append:/var/log/openwebui/stdio.log
+StandardError=append:/var/log/openwebui/error.log
+
+[Install]
+WantedBy=multi-user.target

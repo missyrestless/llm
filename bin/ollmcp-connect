@@ -1,0 +1,59 @@
+#!/bin/bash
+#
+# ollmcp-connect - connect to an MCP server, specifying an LLM
+
+MCP_SERVER_URL="https://mcp.server.domain/api/v1/connect"
+MODEL="qwen3.5:9b"
+TOKEN=
+
+usage() {
+  printf "\nUsage: ollmcp-connect [-m model] [-s mcp server url] [-t token] [-h or -u]"
+  printf "\nWhere:"
+  printf "\n\t-m model specifies the model name to use in the connection"
+  printf "\n\t-s mcp server url specifies the MCP server API URL to use in the connection"
+  printf "\n\t-t token specifies the token to use for authentication"
+  printf "\n\t-h or -u display this usage message and exit\n"
+  printf "\nNote:"
+  printf "\n\tRather than pass the token on the command line it is"
+  printf "\n\tpreferable to set the environment variable MCP_TOKEN\n"
+  exit 1
+}
+
+while getopts ":m:s:t:hu" flag; do
+  case $flag in
+    m)
+      MODEL="$OPTARG"
+      ;;
+    s)
+      MCP_SERVER_URL="$OPTARG"
+      ;;
+    t)
+      TOKEN="$OPTARG"
+      ;;
+    h|u)
+      usage
+      ;;
+    \?)
+      echo "Invalid option: $flag"
+      usage
+      ;;
+  esac
+done
+shift $(( OPTIND - 1 ))
+
+[ "${TOKEN}" ] || {
+  if [ "${MCP_TOKEN}" ]; then
+    TOKEN="${MCP_TOKEN}"
+  else
+    echo "An MCP token must be set in the MCP_TOKEN environment variable or specified on the command line"
+    usage
+  fi
+}
+
+PYENV_HOME="/usr/local/share/llm"
+export PYENV_ROOT="${PYENV_HOME}/.venv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+
+source ${PYENV_ROOT}/bin/activate
+
+ollmcp --mcp-server-url "${MCP_SERVER_URL}?token=${TOKEN}" --model "${MODEL}"

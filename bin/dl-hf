@@ -1,0 +1,114 @@
+#!/bin/bash
+#
+# dl-hf - Download a large language model from Huggingface Hub
+#
+# Usage: dl-hf [-bhmMqu] [-d /path/to/models] [-p model_path]
+#
+# Written 11-Jul-2024 by Missy Restless <missyrestless@gmail.com>
+
+LLM_HOME="/usr/local/share/llm"
+export PYENV_ROOT="${LLM_HOME}/.venv"
+export PATH="${PYENV_ROOT}/bin:${PATH}"
+
+DEF_DL_DIR="/usr/local/share/models"
+DEF_MODEL_PATH="Qwen/Qwen3.5-9B"
+B13_MODEL_PATH="Qwen/Qwen3.5-27B"
+MIS_MODEL_PATH="Qwen/Qwen2.5-7B-Instruct"
+INS_MODEL_PATH="google/gemma-4-31B"
+CAP_MODEL_PATH="deepseek-ai/DeepSeek-V4-Pro"
+
+usage() {
+  printf "\nUsage: dl-hf [-b] [-c] [-d /path/to/models]"
+  printf "\n             [-h] [-m|M] [-p model_path] [-q] [-u]"
+  printf "\nWhere:"
+  printf "\n  -b indicates download ${B13_MODEL_PATH} model"
+  printf "\n  -c indicates download ${CAP_MODEL_PATH} model"
+  printf "\n  -d /path/to/models specifies the download folder"
+  printf "\n  -h displays huggingface cli download help and exits"
+  printf "\n  -m indicates download ${MIS_MODEL_PATH} model"
+  printf "\n  -M indicates download ${INS_MODEL_PATH} model"
+  printf "\n  -p model_path specifies the Huggingface path to model"
+  printf "\n  -q indicates quiet mode"
+  printf "\n  -u displays this usage message and exits"
+  printf "\nWithout arguments, download the default model: ${DEF_MODEL_PATH}"
+  printf "\nDefaults:"
+  printf "\n  Download directory = /usr/local/share/models"
+  printf "\n  Model path = ${DEF_MODEL_PATH}"
+  printf "\nExamples:"
+  printf "\n  # Download OpenAI gpt-oss-20b to the default model download directory"
+  printf "\n  dl-hf -p openai/gpt-oss-20b"
+  printf "\n  # Download the ${B13_MODEL_PATH} model to /tmp"
+  printf "\n  dl-hf -b -d /tmp\n"
+  exit 1
+}
+
+export HF_XET_HIGH_PERFORMANCE=1
+export PATH="${HOME}/.local/bin:${PATH}"
+
+[ -r /etc/vllm/env ] && source /etc/vllm/env
+[ "${HF_TOKEN}" ] && export HF_TOKEN="${HF_TOKEN}"
+
+DL_DIR=
+MODEL_PATH=
+download_help=
+quiet=
+while getopts ":bcd:hmMp:qu" flag; do
+  case $flag in
+    b)
+      MODEL_PATH="${B13_MODEL_PATH}"
+      ;;
+    c)
+      MODEL_PATH="${CAP_MODEL_PATH}"
+      ;;
+    d)
+      DL_DIR="${OPTARG}"
+      ;;
+    h)
+      download_help=1
+      ;;
+    m)
+      MODEL_PATH="${MIS_MODEL_PATH}"
+      ;;
+    M)
+      MODEL_PATH="${INS_MODEL_PATH}"
+      ;;
+    p)
+      MODEL_PATH="$OPTARG"
+      ;;
+    q)
+      quiet="--quiet"
+      ;;
+    u)
+      usage
+      ;;
+    \?)
+      echo "Invalid option: $flag"
+      usage
+      ;;
+  esac
+done
+shift $(( OPTIND - 1 ))
+
+source ${PYENV_ROOT}/bin/activate
+
+[ "${DL_DIR}" ] || DL_DIR="${DEF_DL_DIR}"
+[ "${MODEL_PATH}" ] || MODEL_PATH="${DEF_MODEL_PATH}"
+
+have_cli=$(type -p hf)
+[ "${have_cli}" ] || {
+  printf "\nERROR: cannot locate hf in PATH"
+  printf "\n\tActivate the Python virtual environment"
+  printf "\n\tpip install huggingface-hub"
+  printf "\nRerun this command\n"
+  exit 1
+}
+
+[ "${download_help}" ] && {
+  hf download --help
+  exit 0
+}
+
+hf_cli=$(command -v hf)
+${hf_cli} download ${quiet} \
+  --local-dir "${DL_DIR}" \
+  ${MODEL_PATH}

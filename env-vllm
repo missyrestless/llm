@@ -1,0 +1,34 @@
+HF_HOME=/home/vllm/hf
+HF_HUB_DISABLE_TELEMETRY=1
+HF_TOKEN=__HF_TOKEN__
+#
+VLLM_API_KEY=__VLLM_API_KEY__
+VLLM_HOST=127.0.0.1
+VLLM_HOST_IP=127.0.0.1
+VLLM_PORT=8000
+CUDA_VISIBLE_DEVICES=0
+#
+# Set the GPU memory utilization
+GPU_MEM_UTIL=0.9
+# Set the max model context length
+MAX_MODEL_LEN=16384
+# Set the max number of sequences
+MAX_NUM_SEQ=128
+#
+# Select the model and model name
+#
+# HF_MODEL=/mnt/llm/share/models/Qwen2.5-7B-Instruct
+# HF_MODEL_NAME=qwen2.5-7b-vLLM
+#
+# HF_MODEL=/mnt/llm/share/models/Qwen3.5-27B-GPTQ-Int4
+# HF_MODEL_NAME=qwen3.5-27b-GPTQ-vLLM
+#
+HF_MODEL=/mnt/llm/share/models/Qwen3.6-27B-FP8
+HF_MODEL_NAME=qwen3.6-27b-fp8-vLLM
+#
+# Tool call parser is required if native function calling is enabled
+# Qwen models use hermes, OpenAI OSS models use openai
+# See https://docs.vllm.ai/en/latest/features/tool_calling
+TOOL_CALL_PARSER=qwen3_coder
+
+REASONING_PARSER=qwen3

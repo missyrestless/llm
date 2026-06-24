@@ -1,0 +1,3 @@
+CUDA_VISIBLE_DEVICES=0
+OLLAMA_MODELS="/mnt/llm/share/models"
+PATH="/usr/local/share/llm/.venv/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/go/bin:${PATH}"

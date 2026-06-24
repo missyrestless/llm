@@ -1,0 +1,100 @@
+#!/bin/bash
+#
+# start-vllm - starts a vLLM server instance
+#
+# vLLM environment and some command line arguments are specified in /home/vllm/env
+#
+# Server Options
+#
+# vllm serve meta-llama/Meta-Llama-3-8B-Instruct \
+#   --host 0.0.0.0 \
+#   --port 8000 \
+#   --tensor-parallel-size 2 \
+#   --max-model-len 4096 \
+#   --gpu-memory-utilization 0.90 \
+#   --dtype bfloat16 \
+#   --max-num-seqs 256 \
+#   --enable-chunked-prefill \
+#   --api-key "your-secret-key"
+#
+# --tensor-parallel-size 2 uses 2 GPUs
+# --max-model-len limits context length to reduce VRAM usage
+# --gpu-memory-utilization 0.90 reserves 90% of GPU memory for the vLLM instance
+# --dtype bfloat16 is suitable for GPUs with BF16 support
+# --max-num-seqs controls concurrent sequences
+# --enable-chunked-prefill can improve scheduling for long prompts
+# --api-key makes the server require an API key.
+
+export PATH="/home/vllm/.local/bin:/usr/local/bin:/usr/bin:${PATH}"
+
+if [ -r /etc/vllm/env ]; then
+  source /etc/vllm/env
+  [ "${VLLM_API_KEY}" ] || {
+    echo "ERROR: VLLM_API_KEY not set in /etc/vllm/env"
+    exit 1
+  }
+else
+  echo "ERROR: cannot read /etc/vllm/env"
+  exit 1
+fi
+
+cd /home/vllm
+source .venv/bin/activate
+
+export VLLM_API_KEY="${VLLM_API_KEY}"
+export HF_HOME="${HF_HOME}"
+export HF_TOKEN="${HF_TOKEN}"
+export HF_HUB_DISABLE_TELEMETRY=1
+export CUDA_VISIBLE_DEVICES=0
+
+# These should be set in /home/vllm/env
+[ "${VLLM_HOST}" ] || VLLM_HOST=127.0.0.1
+[ "${VLLM_PORT}" ] || VLLM_PORT=8000
+[ "${GPU_MEM_UTIL}" ] || GPU_MEM_UTIL="0.9"
+[ "${HF_MODEL}" ] || HF_MODEL="/mnt/llm/share/models/Qwen3.5-27B-GPTQ-Int4"
+[ "${HF_MODEL_NAME}" ] || HF_MODEL_NAME="qwen3.5-27b-GPTQ-vLLM"
+[ "${MAX_MODEL_LEN}" ] || MAX_MODEL_LEN=16384
+[ "${GPU_MEM_UTIL}" ] || GPU_MEM_UTIL=0.9
+[ "${MAX_NUM_SEQ}" ] || MAX_NUM_SEQ=128
+[ "${TOOL_CALL_PARSER}" ] || TOOL_CALL_PARSER="hermes"
+
+# TODO
+# - Investigate using --hf-config-path and --hf-token arguments
+# - Recommended sampling parameters for generation
+#     - Thinking mode for general tasks:
+#         temperature=1.0, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0
+#     - Thinking mode for precise coding tasks (e.g. WebDev):
+#         temperature=0.6, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=0.0, repetition_penalty=1.0
+#     - Instruct (or non-thinking) mode for general tasks:
+#         temperature=0.7, top_p=0.8, top_k=20, min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0
+#     - Instruct (or non-thinking) mode for reasoning tasks:
+#         temperature=1.0, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0
+# - Pass model-specific args and env:
+#   VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 vllm serve ... --hf-overrides \
+#     '{"text_config": {"rope_parameters": {"mrope_interleaved": true, \
+#     "mrope_section": [11, 11, 10], "rope_type": "yarn", "rope_theta": 10000000, \
+#     "partial_rotary_factor": 0.25, "factor": 4.0, "original_max_position_embeddings": 262144}}}' \
+#     --max-model-len 1010000
+# - Add startup arguments:
+#   --reasoning-parser qwen3 \
+#   --language-model-only \
+# How to use:
+#   --tokenizer ${HF_MODEL_TOKENIZER} \
+
+have_vllm=$(type -p vllm)
+if [ "${have_vllm}" ]; then
+  vllm serve ${HF_MODEL} \
+    --host ${VLLM_HOST} \
+    --port ${VLLM_PORT} \
+    --api-key ${VLLM_API_KEY} \
+    --served-model-name ${HF_MODEL_NAME} \
+    --enable-auto-tool-choice \
+    --reasoning-parser ${REASONING_PARSER} \
+    --tool-call-parser ${TOOL_CALL_PARSER} \
+    --max-model-len ${MAX_MODEL_LEN} \
+    --gpu-memory-utilization ${GPU_MEM_UTIL} \
+    --max-num-seqs ${MAX_NUM_SEQ} \
+    --enable-prefix-caching
+else
+  echo "ERROR: cannot locate vllm command"
+fi

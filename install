@@ -1,0 +1,1244 @@
+#!/bin/bash
+#
+# install - automated installation and configuration of Ollama, Open WebUI,
+#           llm CLI, Nginx reverse proxy, LM Studio CLI, Huggingface Hub,
+#           llama.cpp, system services, models, Claude Code, and additional tools
+#
+# Written by Missy Restless (missyrestless@gmail.com) June, 2026
+#
+# Set the Python version to install in the virtual environment
+PYVER="3.12"
+# Mount point for 2nd drive
+MNT_PT="/mnt/llm"
+
+if [[ $EUID -eq 0 ]]
+then
+  SUDO=
+else
+  SUDO=sudo
+fi
+
+info() { printf "%b[info]%b %s\n" '\e[0;32m\033[1m' '\e[0m' "$*" >&2; }
+nonl() { printf "%b[info]%b %s" '\e[0;32m\033[1m' '\e[0m' "$*" >&2; }
+warn() { printf "%b[warn]%b %s\n" '\e[0;33m\033[1m' '\e[0m' "$*" >&2; }
+erro() { printf "%b[error]%b %s\n" '\e[0;31m\033[1m' '\e[0m' "$*" >&2; }
+
+usage() {
+  printf "\nUsage: ./install [-A] [-c] [-I] [-L] [-O] [-p] [-h|-u]"
+  printf "\nWhere:"
+  printf "\n\t-A indicates install both Ollama and vLLM"
+  printf "\n\t-c indicates install CUDA Toolkit and exit, no other installation performed"
+  printf "\n\t-I indicates download ComfyUI models and exit, no installation performed"
+  printf "\n\t-L indicates install LM Studio Core and lmster"
+  printf "\n\t-p indicates download/pull models and exit, no installation performed"
+  printf "\n\t-O indicates install Ollama, do not install vLLM"
+  printf "\n\t-h or -u displays this usage message and exits\n"
+  printf "\nWithout arguments ./install installs vLLM and does not install Ollama"
+  printf "\nTypical test/dev usage would be to run ./install -O first, verify system ok, then run ./install -p"
+  printf "\nTypical production deployment would run ./install (vLLM only) or ./install -A\n"
+  exit 1
+}
+
+# Add a user to a group
+add_user_group() {
+  user_to_add="$1"
+  group_to_add="$2"
+  # Does the group exist
+  if grep "^${group_to_add}:" /etc/group > /dev/null; then
+    grep -i "^${group_to_add}:" /etc/group | grep ${user_to_add} > /dev/null || {
+      ${SUDO} usermod -aG ${group_to_add} ${user_to_add}
+    }
+  else
+    erro "Group ${group_to_add} does not appear to exist. User ${user_to_add} not added"
+  fi
+}
+
+dl_hf_model() {
+  hf_model="$1"
+  hf_path=$(basename "${hf_model}")
+  nonl "Downloading ${hf_model} model ... "
+  echo "Downloading ${hf_model} model" >> ${HF_PULL_LOG}
+
+  hf download \
+    --quiet \
+    --local-dir "${MNT_MODELS}/${hf_path}" \
+    ${hfmodel} >> ${HF_PULL_LOG} 2>&1
+
+  echo "----------------------" >> ${HF_PULL_LOG}
+  printf "%b[done]%b\n" '\e[0;32m\033[1m' '\e[0m'
+}
+
+pull_ollama_model() {
+  ollama_model="$1"
+  nonl "Pulling ${ollama_model} model ... "
+  echo "Pulling ${ollama_model} model" >> ${PULL_LOG}
+  ollama pull ${ollama_model} >> ${PULL_LOG} 2>&1
+  echo "----------------------" >> ${PULL_LOG}
+  printf "%b[done]%b\n" '\e[0;32m\033[1m' '\e[0m'
+}
+
+# Download Ollama models, either the initial models or a full list of models
+# The master list of Ollama models to pull is maintained in models/ollama-models.txt
+# The list of initial Ollama models to pull is maintained in models/ollama-init-models.txt
+pull_models() {
+  echo ""
+  if [ "$1" == "full" ]; then
+    PULL_LOG="${LOGDIR}/ollama-full-models-pull.log"
+    MODEL_LIST="${SCRIPT_PATH}/models/ollama-models.txt"
+
+    [ "${installStudio}" ] && {
+      # Add LM Studio bin to PATH
+      export PATH="${PATH}:/home/hbadmin/.lmstudio/bin"
+      # Download LM Studio service large model
+      LMSD_LOG="${LOGDIR}/lms-large-models-download.log"
+      echo "LM Studio Large Models Download Log" > ${LMSD_LOG}
+      echo "---------------======--------------" >> ${LMSD_LOG}
+      have_lms=$(type -p lms)
+      if [ "${have_lms}" ]; then
+        echo ""
+        echo " ------------------------------------------------------------------- "
+        echo "| Downloading LM Studio large service model, this will take a while |"
+        echo " ------------------------------------------------------------------- "
+        # Only download gpt-oss-120b for now
+        for hf_model in gpt-oss-120b
+        do
+          nonl "Downloading ${hf_model} model for LM Studio ... "
+          echo "Downloading ${hf_model} model" >> ${LMSD_LOG}
+          lms get openai/${hf_model} --yes >> ${LMSD_LOG} 2>&1
+          echo "----------------------" >> ${LMSD_LOG}
+          printf "%b[done]%b\n" '\e[0;32m\033[1m' '\e[0m'
+        done
+      else
+        warn "Cannot locate lms command, LM Studio service models not downloaded"
+        echo "Cannot locate lms command, LM Studio service models not downloaded" >> ${LMSD_LOG}
+      fi
+    }
+
+    echo " ----------------------------------------------------------------- "
+    echo "| Downloading full list of Ollama models - this will take a while |"
+    echo " ----------------------------------------------------------------- "
+  else
+    PULL_LOG="${LOGDIR}/ollama-init-models-pull.log"
+    MODEL_LIST="${SCRIPT_PATH}/models/ollama-init-models.txt"
+    echo " ------------------------------------------------------------ "
+    echo "| Downloading several Ollama models - this will take a while |"
+    echo " ------------------------------------------------------------ "
+  fi
+  echo ""
+  echo "Ollama Pull Log" > ${PULL_LOG}
+  echo "---------------" >> ${PULL_LOG}
+  if [ -f ${MODEL_LIST} ]; then
+    while IFS= read -r model
+    do
+      pull_ollama_model "${model}"
+    done < <(cat ${MODEL_LIST} | grep -v "^#")
+  else
+    erro "Cannot locate models list file ${MODEL_LIST}"
+  fi
+
+  echo "Ollama Models List:"  > ${LOGDIR}/models-list.txt 2>&1
+  ollama list >> ${LOGDIR}/models-list.txt 2>&1
+  echo "GPT4ALL Models List:"  >> ${LOGDIR}/models-list.txt 2>&1
+  llm models >> ${LOGDIR}/models-list.txt 2>&1
+  echo "See ${LOGDIR}/models-list.txt for the Ollama and GPT4ALL Models List"
+}
+
+nvm_default_install_dir() {
+  [ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm"
+}
+
+nvm_install_dir() {
+  if [ -n "$NVM_DIR" ]; then
+    printf %s "${NVM_DIR}"
+  else
+    nvm_default_install_dir
+  fi
+}
+
+# Install nvm node version manager, node, and npm
+install_node_nvm() {
+  dir_nvm=$(nvm_install_dir)
+  if [ -d "${dir_nvm}/.git" ]; then
+    export NVM_DIR="${dir_nvm}"
+  else
+    if [ -d "${HOME}/.config/nvm/.git" ]; then
+      if [ -d "${HOME}/.nvm/.git" ]; then
+        export NVM_DIR="${HOME}/.nvm"
+      else
+        export NVM_DIR="${HOME}/.config/nvm"
+      fi
+    else
+      export NVM_DIR="${HOME}/.nvm"
+    fi
+  fi
+  HERE=$(pwd)
+  if [ -d "${NVM_DIR}" ]; then
+    printf "\n\tVerifying latest version of nvm ..."
+    cd "$NVM_DIR"
+    git fetch --tags origin > /dev/null 2>&1
+    git checkout \
+      `git describe --abbrev=0 --tags --match "v[0-9]*" $(git rev-list --tags --max-count=1)` \
+        > /dev/null 2>&1
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+    cd "${HERE}"
+    printf " done"
+  else
+    printf "\n\tInstalling nvm node version manager ..."
+    git clone https://github.com/nvm-sh/nvm.git "$NVM_DIR" > /dev/null 2>&1
+    cd "$NVM_DIR"
+    git checkout \
+      `git describe --abbrev=0 --tags --match "v[0-9]*" $(git rev-list --tags --max-count=1)` \
+      > /dev/null 2>&1
+    if [ -x install.sh ]; then
+      ./install.sh > /dev/null 2>&1
+    else
+      [ -f install.sh ] && {
+        chmod 755 install.sh
+        ./install.sh > /dev/null 2>&1
+      }
+    fi
+    cd "${HERE}"
+    printf " done"
+  fi
+  printf "\n\tVerifying latest version of node with nvm ..."
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+  nvm install node --reinstall-packages-from=node > /dev/null 2>&1
+  nvm install node > /dev/null 2>&1
+  printf " done"
+
+  printf "\n\tVerifying latest version of npm with nvm ..."
+  nvm install-latest-npm > /dev/null 2>&1
+  printf " done\n"
+}
+
+# Download models used by ComfyUI image generation engine
+download_comfy_models() {
+  [ "${HF_TOKEN}" ] && export HF_TOKEN="${HF_TOKEN}"
+  CF_MODELS_DIR="${MNT_PT}/ComfyUI/models"
+  for model_dir in checkpoints diffusion_models text_encoders vae
+  do
+    [ -d "${CF_MODELS_DIR}/${model_dir}" ] || mkdir -p "${CF_MODELS_DIR}/${model_dir}"
+  done
+  hf_repo="Comfy-Org/stable-diffusion-v1-5-archive"
+  hf_model="v1-5-pruned-emaonly-fp16.safetensors"
+  nonl "Downloading ${hf_model} model ... "
+  hf download --quiet --local-dir "${CF_MODELS_DIR}/checkpoints" ${hf_repo} ${hf_model} > /dev/null 2>&1
+  printf "%b[done]%b\n" '\e[0;32m\033[1m' '\e[0m'
+  hf_repo="Lykon/DreamShaper"
+  hf_model="DreamShaper_8_pruned.safetensors"
+  nonl "Downloading ${hf_model} model ... "
+  hf download --quiet --local-dir "${CF_MODELS_DIR}/checkpoints" ${hf_repo} ${hf_model} > /dev/null 2>&1
+  printf "%b[done]%b\n" '\e[0;32m\033[1m' '\e[0m'
+  hf_repo="Comfy-Org/Qwen-Image_ComfyUI"
+  hf_model="split_files/diffusion_models/qwen_image_fp8_e4m3fn.safetensors"
+  nonl "Downloading ${hf_model} model ... "
+  hf download --quiet --local-dir "${CF_MODELS_DIR}/diffusion_models" hf://${hf_repo}/${hf_model} > /dev/null 2>&1
+  printf "%b[done]%b\n" '\e[0;32m\033[1m' '\e[0m'
+  hf_repo="Comfy-Org/Qwen-Image-Edit_ComfyUI"
+  hf_model="split_files/diffusion_models/qwen_image_edit_fp8_e4m3fn.safetensors"
+  nonl "Downloading ${hf_model} model ... "
+  hf download --quiet --local-dir "${CF_MODELS_DIR}/diffusion_models" hf://${hf_repo}/${hf_model} > /dev/null 2>&1
+  printf "%b[done]%b\n" '\e[0;32m\033[1m' '\e[0m'
+  hf_repo="Comfy-Org/Qwen-Image_ComfyUI"
+  hf_model="split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors"
+  nonl "Downloading ${hf_model} model ... "
+  hf download --quiet --local-dir "${CF_MODELS_DIR}/text_encoders" hf://${hf_repo}/${hf_model} > /dev/null 2>&1
+  printf "%b[done]%b\n" '\e[0;32m\033[1m' '\e[0m'
+  hf_repo="Comfy-Org/Qwen-Image_ComfyUI"
+  hf_model="split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors"
+  nonl "Downloading ${hf_model} model ... "
+  hf download --quiet --local-dir "${CF_MODELS_DIR}/text_encoders" hf://${hf_repo}/${hf_model} > /dev/null 2>&1
+  printf "%b[done]%b\n" '\e[0;32m\033[1m' '\e[0m'
+  hf_repo="Comfy-Org/Qwen-Image_ComfyUI"
+  hf_model="split_files/vae/qwen_image_vae.safetensors"
+  nonl "Downloading ${hf_model} model ... "
+  hf download --quiet --local-dir "${CF_MODELS_DIR}/vae" hf://${hf_repo}/${hf_model} > /dev/null 2>&1
+  printf "%b[done]%b\n" '\e[0;32m\033[1m' '\e[0m'
+  hf_repo="Comfy-Org/Qwen-Image_ComfyUI"
+  hf_model="split_files/vae/qwen_image_vae.safetensors"
+  nonl "Downloading ${hf_model} model ... "
+  hf download --quiet --local-dir "${CF_MODELS_DIR}/vae" hf://${hf_repo}/${hf_model} > /dev/null 2>&1
+  printf "%b[done]%b\n" '\e[0;32m\033[1m' '\e[0m'
+  mv ${CF_MODELS_DIR}/diffusion_models/split_files/diffusion_models/* ${CF_MODELS_DIR}/diffusion_models
+  mv ${CF_MODELS_DIR}/text_encoders/split_files/text_encoders/* ${CF_MODELS_DIR}/text_encoders
+  mv ${CF_MODELS_DIR}/vae/split_files/vae ${CF_MODELS_DIR}/vae
+  for model_dir in diffusion_models text_encoders vae
+  do
+    rm -rf ${CF_MODELS_DIR}/${model_dir}/split_files
+  done
+}
+
+LLM_SHARE="/usr/local/share"
+LLM_HOME="${LLM_SHARE}/llm"
+# Mounted share
+MNT_SHARE="${MNT_PT}/share"
+LLM_DATA="${MNT_SHARE}/data"
+# Huggingface mounted home
+HF_MNT_HOME="${MNT_SHARE}/hf"
+# Mounted Python virtual environment
+MNT_PYENV="${MNT_PT}/.venv"
+
+### Ollama, Open WebUI, and vLLM share the same user/group
+VLLM_HOME="/home/vllm"
+VLLM_USER="vllm"
+VLLM_GROUP="vllm"
+### A non-privileged user is used by Open Terminal
+TERM_HOME="/home/terminal"
+TERM_USER="terminal"
+TERM_GROUP="terminal"
+# Allow the hbadmin user to read and write in protected folders
+HB_USER=$(id -u -n)
+HB_GROUP=$(id -g -n)
+
+# Models folder on separate disk
+export MNT_MODELS="${MNT_SHARE}/models"
+
+# Model folders
+MODELS_DIR="${LLM_HOME}/models"
+SHARE_MODELS="${LLM_SHARE}/models"
+LMSTUDIO_DIR="${LLM_SHARE}/lmstudio"
+# Where to install Python scripts' front-ends
+LLM_BIN="/usr/local/bin"
+# Where to install systemd units' start scripts
+LLM_SBIN="/usr/local/sbin"
+# Prefix for OpenAI and vLLM API keys
+API_PREFIX="sk-svcacct"
+
+SCRIPT_PATH="$(
+  cd "$(dirname "$0")"
+  pwd -P
+)"
+have_real=$(type -p realpath)
+[ "${have_real}" ] && SCRIPT_PATH="$(realpath $SCRIPT_PATH)"
+
+if [ -f ${SCRIPT_PATH}/.secrets ]; then
+  source ${SCRIPT_PATH}/.secrets
+else
+  erro "Cannot locate ${SCRIPT_PATH}/.secrets"
+  info "Huggingface will be slow"
+fi
+
+comfyModels=
+pullModels=
+installCuda=
+# Use -L command line option to install LM Studio Core and lmster
+installStudio=
+# Ollama installed by default
+# If -A command line option then install both vLLM and Ollama
+# If -O command line option then install Ollama and do not install vLLM
+installOllama=
+installVllm=1
+while getopts ":AcILpOhu" flag; do
+  case $flag in
+    A)
+      installOllama=1
+      installVllm=1
+      ;;
+    c)
+      installCuda=1
+      ;;
+    I)
+      comfyModels=1
+      ;;
+    L)
+      installStudio=1
+      ;;
+    p)
+      pullModels=1
+      ;;
+    O)
+      installOllama=1
+      installVllm=
+      ;;
+    h|u)
+      usage
+      ;;
+    \?)
+      echo "Invalid option: $flag"
+      usage
+      ;;
+  esac
+done
+shift $(( OPTIND - 1 ))
+
+${SUDO} mount | grep ${MNT_PT} > /dev/null || {
+  erro "Installation requires a mounted drive on ${MNT_PT}"
+  info "Configure this system with a mounted drive and rerun install"
+  exit 1
+}
+
+LOGDIR="${MNT_PT}"/logs
+[ -d "${LOGDIR}" ] || ${SUDO} mkdir -p "${LOGDIR}"
+
+[ "${comfyModels}" ] && {
+  [ -f ${MNT_PYENV}/bin/activate ] || {
+    erro "Cannot locate ${MNT_PYENV}/bin/activate"
+    warn "Check the Python virtual environment there. Exiting."
+    exit 1
+  }
+  source ${MNT_PYENV}/bin/activate
+
+  export PATH="${MNT_PYENV}/bin:${PATH}"
+  have_hf=$(type -p hf)
+  if [ "${have_hf}" ]; then
+    download_comfy_models
+  else
+    erro "Model download error:"
+    printf "\n\tCannot locate hf command in PATH"
+    erro "No ComfyUI models downloaded"
+    exit 1
+  fi
+  exit 0
+}
+
+[ "${pullModels}" ] && {
+  have_ollama=$(type -p ollama)
+  if [ "${have_ollama}" ]; then
+    pull_models full
+  else
+    erro "Ollama not found. Correct errors in 'curl -fSL https://ollama.com/install.sh | sh'"
+    exit 1
+  fi
+  exit 0
+}
+
+[ "${installCuda}" ] && {
+  echo " -------------------------------- "
+  echo "| Installing Nvidia CUDA Toolkit |"
+  echo " -------------------------------- "
+  ${SUDO} apt install -q -y cuda-toolkit nvidia-cuda-toolkit > ${LOGDIR}/install-cuda-toolkit.log 2>&1
+  exit 0
+}
+
+# Create directories and symlinks
+[ -d ${LLM_SHARE} ] || ${SUDO} mkdir -p ${LLM_SHARE}
+[ -d ${LLM_HOME} ] && {
+  echo "Removing existing $LLM_HOME"
+  ${SUDO} rm -rf ${LLM_HOME}
+}
+${SUDO} ln -s ${MNT_PT} ${LLM_HOME}
+
+[ -d ${MNT_MODELS} ] || ${SUDO} mkdir -p ${MNT_MODELS}
+
+[ -d ${LLM_DATA} ] || ${SUDO} mkdir -p ${LLM_DATA}
+${SUDO} rm -rf ${LLM_SHARE}/data
+${SUDO} ln -s ${LLM_DATA} ${LLM_SHARE}/data
+
+# Use a Github API token if one is set
+if [ "${GITHUB_TOKEN}" ]; then
+  export GITHUB_TOKEN
+else
+  [ "${GH_API_TOKEN}" ] && export GITHUB_TOKEN="${GH_API_TOKEN}"
+  [ "${GITHUB_TOKEN}" ] || {
+    [ "${GH_TOKEN}" ] && export GITHUB_TOKEN="${GH_TOKEN}"
+  }
+fi
+# Set an authorization header in case we need to use the Github API
+if [ "${GITHUB_TOKEN}" ]; then
+  AUTH_HEADER="-H \"Authorization: Bearer ${GITHUB_TOKEN}\""
+else
+  AUTH_HEADER=
+fi
+
+cd "${SCRIPT_PATH}"
+
+export PATH="${HOME}/.local/bin:${PATH}"
+
+# Make the log dir writeable by all, fixup permissions later
+${SUDO} chmod 777 "${LOGDIR}"
+
+# Fixup /etc/hosts with IP and hostnames
+addr=$(hostname -I | awk '{print $1}')
+[ "${addr}" ] || {
+  addr=$(ip address | grep inet | grep -v 127.0.0.1 | awk ' { print $2 } ' | awk -F '/' ' { print $1 }')
+}
+if [ "${addr}" ]; then
+  if grep ${addr} /etc/hosts > /dev/null; then
+    warn "IP address already in /etc/hosts, manually configure /etc/hosts"
+  else
+    echo "${addr}  mcp.neoman.dev openwebui.neoman.dev" > /tmp/ip$$
+    cat /etc/hosts /tmp/ip$$ > /tmp/hosts$$
+    ${SUDO} cp /tmp/hosts$$ /etc/hosts
+    rm -f /tmp/hosts$$ /tmp/ip$$
+    info "IP address and hostnames added to /etc/hosts --- manually verify"
+  fi
+else
+  warn "Unable to determine IP address, /etc/hosts not configured"
+fi
+
+# Set the Python executable name
+PYTHON=
+have_python3=$(type -p python3)
+if [ "${have_python3}" ]; then
+  PYTHON=python3
+else
+  have_python=$(type -p python)
+  [ "${have_python}" ] && PYTHON=python
+fi
+
+# Temporarily stop the Python unattended upgrade process
+# so it does not interfere with any apt/dpkg install
+${SUDO} systemctl stop unattended-upgrades
+
+export DEBIAN_FRONTEND=noninteractive
+have_apt=$(type -p apt)
+if [ "${have_apt}" ]; then
+  echo " --------------------------------------------------- "
+  echo "| Updating and Upgrading system - please be patient |"
+  echo " --------------------------------------------------- "
+  ${SUDO} apt update -q -y > /dev/null 2>&1
+  ${SUDO} apt upgrade -q -y > /dev/null 2>&1
+  ${SUDO} apt autoremove -q -y > /dev/null 2>&1
+else
+  erro "Cannot locate apt"
+  ${SUDO} systemctl start unattended-upgrades
+  exit 1
+fi
+
+have_curl=$(type -p curl)
+[ "${have_curl}" ] || ${SUDO} apt install curl -q -y
+
+echo " ------------------------------------------------ "
+echo "| Installing Python build dependencies and tools |"
+echo " ------------------------------------------------ "
+${SUDO} apt install -q -y build-essential zlib1g-dev libssl-dev libncurses5-dev telnet \
+                          libgdbm-dev libnss3-dev libreadline-dev libffi-dev libsqlite3-dev \
+                          libbz2-dev liblzma-dev tk-dev pkg-config wget curl git jq > /dev/null 2>&1
+
+# Allow other users to execute the uv installed tools in hbadmin HOME
+chmod 755 ${HOME}
+# Make sure the install created the provider user and home directory
+grep -i "^${VLLM_GROUP}:" /etc/group > /dev/null || {
+  ${SUDO} groupadd ${VLLM_GROUP} 2> /dev/null
+}
+# Create the system user
+id "${VLLM_USER}" > /dev/null 2>&1 || {
+  ${SUDO} useradd -r -s /bin/false -g ${VLLM_GROUP} -m -d ${VLLM_HOME} ${VLLM_USER}
+}
+# Add this user to the hbadmin group
+add_user_group "${VLLM_USER}" "${HB_GROUP}"
+
+# Create the terminal user for Open Terminal
+id "${TERM_USER}" > /dev/null 2>&1 || {
+  grep -i "^${TERM_GROUP}:" /etc/group > /dev/null || {
+    ${SUDO} groupadd ${TERM_GROUP} 2> /dev/null
+  }
+  ${SUDO} useradd -r -s /bin/bash -g ${TERM_GROUP} -m -d ${TERM_HOME} ${TERM_USER}
+}
+[ "${TERM_PASS}" ] || {
+  warn "TERM_PASS not set in .secrets, using password 'ChangeMe' for ${TERM_USER} Open Terminal user"
+  TERM_PASS="ChangeMe"
+}
+echo "${TERM_USER}:${TERM_PASS}" | ${SUDO} chpasswd
+# Generate a secure Open Terminal key
+have_openssl=$(type -p openssl)
+if [ "${have_openssl}" ]; then
+  TERMINAL_API_KEY="$(openssl rand -hex 32)"
+else
+  warn "Could not locate openssl in PATH, using dummy Open Terminal API key"
+  TERMINAL_API_KEY='dummy-terminal-api-key-replace-with-openssl-rand-hex-32'
+fi
+echo "TERMINAL_API_KEY=${TERMINAL_API_KEY}" > /tmp/tak$$
+${SUDO} cp /tmp/tak$$ ${TERM_HOME}/env
+${SUDO} chown ${TERM_USER}:${TERM_GROUP} ${TERM_HOME}/env
+${SUDO} chmod 400 ${TERM_HOME}/env
+rm -f /tmp/tak$$
+
+[ -d ${HF_MNT_HOME} ] || ${SUDO} mkdir -p ${HF_MNT_HOME}
+${SUDO} rm -rf ${VLLM_HOME}/hf
+${SUDO} ln -s ${HF_MNT_HOME} ${VLLM_HOME}/hf
+
+[ -d ${LLM_HOME} ] || ${SUDO} ln -s ${MNT_PT} ${LLM_HOME}
+${SUDO} chown -R ${VLLM_USER}:${HB_GROUP} ${MNT_PT}
+${SUDO} chmod 775 ${MNT_PT}
+
+[ -d ${MNT_PYENV} ] && {
+  echo "Removing existing $MNT_PYENV"
+  ${SUDO} rm -rf ${MNT_PYENV}
+}
+cd ${MNT_PT}
+
+echo " --------------- "
+echo "| Installing uv |"
+echo " --------------- "
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+have_uv=$(type -p uv)
+[ "${have_uv}" ] || {
+  echo "Cannot locate uv in PATH"
+  exit 1
+}
+
+echo " --------------------------------------- "
+echo "| Installing Python virtual environment |"
+echo " --------------------------------------- "
+uv venv --python 3.12 --clear --seed --managed-python > install-venv.log 2>&1
+[ -f .venv/bin/activate ] || {
+  erro "Cannot locate ${MNT_PT}/.venv/bin/activate"
+  warn "Check the Python virtual environment there. Exiting."
+  exit 1
+}
+source .venv/bin/activate
+
+export PATH="${MNT_PYENV}/bin:${PATH}"
+
+cd "${SCRIPT_PATH}"
+
+echo "-----------------------------------------------------------"
+echo "Python virtual environment setup in ${MNT_PYENV}"
+echo "-----------------------------------------------------------"
+
+# Install Node, nvm/npm
+echo " ------------------------------ "
+echo "| Installing Node.js, Nvm, Npm |"
+echo " ------------------------------ "
+install_node_nvm
+source ${HOME}/.bashrc
+have_npm=$(type -p npm)
+[ "${have_npm}" ] || warn "Cannot locate npm in PATH"
+
+have_python3=$(type -p python3)
+if [ "${have_python3}" ]; then
+  PYTHON=python3
+else
+  PYTHON=python
+fi
+
+echo " ----------------- "
+echo "| Installing pipx |"
+echo " ----------------- "
+info "Removing any existing pipx installation"
+${SUDO} apt remove pipx -q -y
+rm -f ${HOME}/.local/bin/pipx
+${SUDO} rm -f /usr/local/bin/pipx
+printf "\nInstalling pipx with apt ... "
+${SUDO} apt install python3-pip pipx -q -y > ${LOGDIR}/install-pipx.log 2>&1
+printf "done\n"
+
+have_pipx=$(type -p pipx)
+if [ "${have_pipx}" ]; then
+  pipx ensurepath >> ${LOGDIR}/install-pipx.log 2>&1
+  source ${HOME}/.bashrc
+else
+  erro "Pipx not found. Check the pipx installation and PATH"
+fi
+
+pip install uv > ${LOGDIR}/install-uv.log 2>&1
+
+# Generate a secure Open WebUI key
+have_openssl=$(type -p openssl)
+if [ "${have_openssl}" ]; then
+  owkey=$(openssl rand -hex 32)
+  OPENAI_API_KEY="$(openssl rand -hex 32)"
+else
+  warn "Could not locate openssl in PATH, using dummy WEBUI_SECRET_KEY and OpenAI API key"
+  owkey='dummy-webui-secret-key-replace-with-openssl-rand-hex-32'
+  OPENAI_API_KEY='dummy-api-key-replace-with-openssl-rand-hex-32'
+fi
+
+# Install vLLM for production, Ollama for dev/test
+if [ "${installVllm}" ]; then
+  cd ${SCRIPT_PATH}
+  echo " ----------------- "
+  echo "| Installing vLLM |"
+  echo " ----------------- "
+  # Create folders and environment with proper permissions
+  ${SUDO} rm -rf /etc/vllm /var/log/vllm
+  ${SUDO} install -d -m 0755 -o root -g root /etc/vllm
+  ${SUDO} install -d -m 0755 -o vllm -g vllm /var/log/vllm
+  # Reuse the Open WebUI Open AI key for the vLLM API key
+  if [ "${OPENAI_API_KEY}" ]; then
+    VLLM_API_KEY="${OPENAI_API_KEY}"
+  else
+    VLLM_API_KEY='demo-key'
+    warn "Missing OpenAI API key!"
+    info "vLLM configured with dummy API key"
+  fi
+  if [ -f env-vllm ]; then
+    cat env-vllm | sed -e "s/__VLLM_API_KEY__/${API_PREFIX}-${VLLM_API_KEY}/" > /tmp/vllm$$
+    if [ "${HF_TOKEN}" ]; then
+      sed -i -e "s/__HF_TOKEN__/${HF_TOKEN}/" /tmp/vllm$$
+    else
+      echo "WARNING: HF_TOKEN not found in environment"
+      sed -i -e "s/__HF_TOKEN__//" /tmp/vllm$$
+    fi
+    ${SUDO} cp /tmp/vllm$$ /etc/vllm/env
+  else
+    echo "export HF_HOME=/home/vllm/hf" > /tmp/vllm$$
+    echo "export HF_HUB_DISABLE_TELEMETRY=1" >> /tmp/vllm$$
+    if [ "${HF_TOKEN}" ]; then
+      echo "export HF_TOKEN=${HF_TOKEN}" >> /tmp/vllm$$
+    else
+      warn "HF_TOKEN not found in environment"
+    fi
+    echo "export VLLM_API_KEY=${VLLM_API_KEY}" >> /tmp/vllm$$
+    echo "export VLLM_HOST_IP=127.0.0.1" >> /tmp/vllm$$
+    echo "export CUDA_VISIBLE_DEVICES=0" >> /tmp/vllm$$
+    ${SUDO} cp /tmp/vllm$$ /etc/vllm/env
+  fi
+  rm -f /tmp/vllm$$
+  ${SUDO} chown vllm:hbadmin /etc/vllm/env
+  ${SUDO} chmod 640 /etc/vllm/env
+
+  if [ -x ${SCRIPT_PATH}/scripts/install-vllm-as-vllm.sh ]; then
+    sudo -u vllm ${SCRIPT_PATH}/scripts/install-vllm-as-vllm.sh
+  else
+    erro "Cannot locate ${SCRIPT_PATH}/scripts/install-vllm-as-vllm.sh"
+    info "Locate and run this script with 'sudo -u vllm ...'"
+  fi
+fi
+if [ "${installOllama}" ]; then
+  echo " ------------------- "
+  echo "| Installing Ollama |"
+  echo " ------------------- "
+  curl -fsSL https://ollama.com/install.sh | sh
+
+  # Install Ollama environment file in /home/vllm/env
+  [ -d ${VLLM_HOME} ] || ${SUDO} mkdir -p ${VLLM_HOME}
+  if [ -f env-ollama ]; then
+    ${SUDO} cp env-ollama ${VLLM_HOME}/env
+  else
+    echo "export OLLAMA_MODELS=\"${MNT_SHARE}/models\"" > /tmp/oenv$$
+    echo "export PATH=\"${MNT_PYENV}/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/go/bin:\${PATH}\"" >> /tmp/oenv$$
+    echo "export CUDA_VISIBLE_DEVICES=0" >> /tmp/oenv$$
+    ${SUDO} cp /tmp/oenv$$ ${VLLM_HOME}/env
+    rm -f /tmp/oenv$$
+  fi
+  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} ${VLLM_HOME}/env
+  ${SUDO} chmod 640 ${VLLM_HOME}/env
+  rm -f /tmp/owenv$$
+
+  # Add this user, if not root, to the vllm group
+  [ "${SUDO}" ] && {
+    grep -i "^${VLLM_GROUP}:" /etc/group | grep $USER > /dev/null || {
+      ${SUDO} usermod -aG ${VLLM_GROUP} $USER
+    }
+  }
+fi
+
+# Install Claude Code
+echo " ------------------------ "
+echo "| Installing Claude Code |"
+echo " ------------------------ "
+curl -fsSL https://claude.ai/install.sh | bash
+
+# Upgrade pip and setuptools
+printf "\n\tUpgrading pip and setuptools ..."
+pip install --upgrade pip > /dev/null 2>&1
+pip install --upgrade setuptools > /dev/null 2>&1
+printf " done\n"
+
+printf "\n\tInstalling llama-cpp-python module ..."
+pip install llama-cpp-python > ${LOGDIR}/llama-cpp.log 2>&1
+printf " done\n"
+
+# Install Huggingface Hub
+printf "\n\tInstalling Huggingface Hub ..."
+# Enable fast download
+export HF_XET_HIGH_PERFORMANCE=1
+pip install -U huggingface_hub > ${LOGDIR}/huggingface.log 2>&1
+# Install dependencies for both torch-specific and MCP-specific features.
+pip install -U "huggingface_hub[cli,mcp,torch]" >> ${LOGDIR}/huggingface.log 2>&1
+printf " done\n"
+
+# Install script front-ends
+[ -d "${LLM_BIN}" ] || ${SUDO} mkdir -p "${LLM_BIN}"
+[ -d "${SCRIPT_PATH}"/bin ] && {
+  cd "${SCRIPT_PATH}"/bin
+  for script in *
+  do
+    [ "${script}" == "*" ] && continue
+    ${SUDO} cp ${script} "${LLM_BIN}"/${script}
+    ${SUDO} chmod 755 "${LLM_BIN}"/${script}
+  done
+}
+
+# Install systemd start scripts
+[ -d "${LLM_SBIN}" ] || ${SUDO} mkdir -p "${LLM_SBIN}"
+[ -d "${SCRIPT_PATH}"/sbin ] && {
+  cd "${SCRIPT_PATH}"/sbin
+  for script in *
+  do
+    [ "${script}" == "*" ] && continue
+    ${SUDO} cp ${script} "${LLM_SBIN}"/${script}
+    ${SUDO} chmod 755 "${LLM_SBIN}"/${script}
+  done
+}
+[ -f ${LLM_BIN}/check-services ] && {
+  ${SUDO} rm -f ${LLM_BIN}/chksvc
+  ${SUDO} ln -s ${LLM_BIN}/check-services ${LLM_BIN}/chksvc
+}
+
+cd "${SCRIPT_PATH}"
+
+# Create symlinks to models folder
+[ -d ${MODELS_DIR} ] && ${SUDO} rm -rf ${MODELS_DIR}
+${SUDO} ln -s ${MNT_MODELS} ${MODELS_DIR}
+[ -d ${SHARE_MODELS} ] && ${SUDO} rm -rf ${SHARE_MODELS}
+${SUDO} ln -s "${MNT_MODELS}" ${SHARE_MODELS}
+
+## LM Studio Installation
+#
+[ "${installStudio}" ] && {
+  if grep -o 'avx2' /proc/cpuinfo > /dev/null; then
+    echo " ------------------------------------- "
+    echo "| Installing LM Studio core (llmster) |"
+    echo " ------------------------------------- "
+    curl -fsSL https://lmstudio.ai/install.sh | bash
+  else
+    echo " -------------------------------------------------- "
+    echo "| LM Studio core NOT INSTALLED                     |"
+    echo "| AVX2 CPU support not detected.                   |"
+    echo "| To install LM Studio Core, enable AVX2 and run:  |"
+    echo "| curl -fsSL https://lmstudio.ai/install.sh | bash |"
+    echo " -------------------------------------------------- "
+  fi
+}
+
+echo " -------------------------------- "
+echo "| Installing LLM CLI and Plugins |"
+echo " -------------------------------- "
+
+pipx install llm > ${LOGDIR}/install-llm.log 2>&1
+
+pipx install strip-tags > ${LOGDIR}/pipx.log 2>&1
+pipx install ttok >> ${LOGDIR}/pipx.log 2>&1
+pipx install symbex >> ${LOGDIR}/pipx.log 2>&1
+pipx install openai --include-deps > ${LOGDIR}/install-openai.log 2>&1
+pipx install pyaml >> ${LOGDIR}/pipx.log 2>&1
+
+# Install MCP
+pipx install mcp > ${LOGDIR}/install-mcp.log 2>&1
+# Install the ollmcp MCP client for Ollama
+pipx install ollmcp >> ${LOGDIR}/install-mcp.log 2>&1
+
+llm install llm-gpt4all >> ${LOGDIR}/install-llm.log 2>&1
+
+echo " ------------------- "
+echo "| Installing ffmpeg |"
+echo " ------------------- "
+${SUDO} apt install -q -y ffmpeg > ${LOGDIR}/install-ffmpeg.log 2>&1
+echo " ------------------ "
+echo "| Installing nvtop |"
+echo " ------------------ "
+${SUDO} apt install -q -y nvtop > ${LOGDIR}/install-nvtop.log 2>&1
+
+echo " ------------------------------------------- "
+echo "| Installing Open WebUI - please be patient |"
+echo " ------------------------------------------- "
+# Create the Open WebUI group
+grep -i "^${VLLM_GROUP}:" /etc/group > /dev/null || {
+  ${SUDO} groupadd ${VLLM_GROUP} 2> /dev/null
+}
+# Create an Open WebUI system user
+id "${VLLM_USER}" > /dev/null 2>&1 || {
+  ${SUDO} useradd -r -s /bin/false -g ${VLLM_GROUP} -m -d ${VLLM_HOME} ${VLLM_USER}
+}
+# Add this user to the hbadmin group
+add_user_group "${VLLM_USER}" "${HB_GROUP}"
+
+# Install Open WebUI
+pip install "open-webui[all]" > ${LOGDIR}/install-open-webui.log 2>&1
+
+# Add the secret key to the Open WebUI environment file and install the env
+if [ -f env-open-webui ]; then
+  cp env-open-webui /tmp/owenv$$
+else
+  touch /tmp/owenv$$
+fi
+echo "WEBUI_SECRET_KEY=\"${owkey}\"" >> /tmp/owenv$$
+if [ "${HF_TOKEN}" ]; then
+  echo "# Huggingface access token" >> /tmp/owenv$$
+  echo "HF_TOKEN=\"${HF_TOKEN}\"" >> /tmp/owenv$$
+  export HF_TOKEN
+else
+  warn "No Huggingface access token found in environment"
+fi
+grep __ENABLE_OLLAMA_API__ /tmp/owenv$$ > /dev/null && {
+  if [ "${installOllama}" ]; then
+    enable_ollama="True"
+  else
+    enable_ollama="False"
+  fi
+  sed -i -e "s/__ENABLE_OLLAMA_API__/${enable_ollama}/" /tmp/owenv$$
+}
+if [ "${OPENAI_API_KEY}" ]; then
+  sed -i -e "s/__OPENAI_API_KEY__/${API_PREFIX}-${OPENAI_API_KEY}/" /tmp/owenv$$
+else
+  warn "Missing OpenAI API key in .secrets file"
+  info "Open WebUI not configured for OpenAI"
+fi
+if [ "${TERMINAL_API_KEY}" ]; then
+  sed -i -e "s/__TERMINAL_API_KEY__/${TERMINAL_API_KEY}/" /tmp/owenv$$
+else
+  warn "Missing Open Terminal API key"
+  info "Open WebUI not configured for Open Terminal"
+fi
+[ -d /etc/open-webui ] || ${SUDO} mkdir /etc/open-webui
+${SUDO} cp /tmp/owenv$$ /etc/open-webui/env
+${SUDO} chown ${VLLM_USER}:${HB_GROUP} /etc/open-webui/env
+${SUDO} chmod 640 /etc/open-webui/env
+rm -f /tmp/owenv$$
+
+echo " -------------------------- "
+echo "| Installing Open Terminal |"
+echo " -------------------------- "
+pip install open-terminal > ${LOGDIR}/install-open-terminal.log 2>&1
+
+echo " -------------------- "
+echo "| Installing ComfyUI |"
+echo " -------------------- "
+cd ${MNT_PT}
+${SUDO} rm -rf ${MNT_PT}/ComfyUI
+git clone https://github.com/Comfy-Org/ComfyUI.git > /dev/null 2>&1
+
+cd ComfyUI
+pip install -r requirements.txt > ${LOGDIR}/install-ComfyUI.log 2>&1
+if [ -d custom_nodes ]; then
+  cd custom_nodes
+  git clone https://github.com/ltdrdata/ComfyUI-Manager comfyui-manager
+  cd ..
+else
+  warn "custom_nodes directory not found, ComfyUI Manager not installed"
+fi
+have_hf=$(type -p hf)
+if [ "${have_hf}" ]; then
+  download_comfy_models
+else
+  warn "Model download error:"
+  printf "\n\tCannot locate hf command in PATH"
+  warn "No checkpoint model downloaded"
+fi
+cd "${SCRIPT_PATH}"
+
+# If we are installing an Ollama service then remove the default one
+[ -f "${SCRIPT_PATH}"/etc/ollama.service ] && {
+  ${SUDO} systemctl stop ollama > /dev/null 2>&1
+  ${SUDO} systemctl disable ollama > /dev/null 2>&1
+  ${SUDO} rm -f /etc/systemd/system/ollama.service
+}
+
+# Install systemd service units
+[ -d "${SCRIPT_PATH}"/etc ] && {
+  cd "${SCRIPT_PATH}"/etc
+  reload=
+  for script in *.service
+  do
+    [ "${script}" == "*.service" ] && continue
+    case ${script} in
+      lmstudio*)
+        [ "${installStudio}" ] && {
+          ${SUDO} cp ${script} /lib/systemd/system
+          ${SUDO} chmod 644 /lib/systemd/system/${script}
+          reload=1
+        }
+        ;;
+      ollama*)
+        [ "${installOllama}" ] && {
+          ${SUDO} cp ${script} /lib/systemd/system
+          ${SUDO} chmod 644 /lib/systemd/system/${script}
+          reload=1
+        }
+        ;;
+      vllm*)
+        [ "${installVllm}" ] && {
+          ${SUDO} cp ${script} /lib/systemd/system
+          ${SUDO} chmod 644 /lib/systemd/system/${script}
+          reload=1
+        }
+        ;;
+      *)
+        ${SUDO} cp ${script} /lib/systemd/system
+        ${SUDO} chmod 644 /lib/systemd/system/${script}
+        reload=1
+        ;;
+    esac
+  done
+  [ "${reload}" ] && ${SUDO} systemctl daemon-reload
+  cd "${SCRIPT_PATH}"
+}
+
+## Nginx Installation
+#
+echo " ------------------ "
+echo "| Installing Nginx |"
+echo " ------------------ "
+start_nginx=1
+[ -f ${SCRIPT_PATH}/etc/nginx/ssl/server.crt ] || {
+  erro "Cannot locate etc/nginx/ssl/server.crt"
+  info "Nginx will not be started"
+  start_nginx=
+}
+[ -f ${SCRIPT_PATH}/etc/nginx/ssl/server.key ] || {
+  erro "Cannot locate nginx/ssl/server.key"
+  info "Nginx will not be started"
+  start_nginx=
+}
+[ "${start_nginx}" ] || {
+  echo "Copy server.crt and server.key to ${SCRIPT_PATH}/etc/nginx/ssl/"
+  printf "\nPress <Enter> to continue after completing ... "
+  read -r yn
+  printf "\n"
+}
+
+# Run Ollama behind an Nginx reverse proxy
+cd "${SCRIPT_PATH}"
+[ -d etc/nginx ] && {
+  printf "\nInstalling and configuring nginx ... "
+  ${SUDO} openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048 > /dev/null 2>&1
+  ${SUDO} apt install -q -y nginx > ${LOGDIR}/nginx.log 2>&1
+  printf "done\n"
+  ${SUDO} systemctl stop nginx
+  cd etc/nginx
+  [ -d /var/www/html ] || ${SUDO} mkdir -p /var/www/html
+  [ -f index.html ] && {
+    ${SUDO} cp index.html /var/www/html/index.html
+    ${SUDO} chmod 644 /var/www/html/index.html
+  }
+  [ -f ollama.css ] && {
+    ${SUDO} cp ollama.css /var/www/html/ollama.css
+    ${SUDO} chmod 644 /var/www/html/ollama.css
+  }
+  [ -f favicon.ico ] && {
+    ${SUDO} cp favicon.ico /var/www/html/favicon.ico
+    ${SUDO} chmod 644 /var/www/html/favicon.ico
+  }
+  [ -f ollama.users ] && {
+    ${SUDO} cp ollama.users /var/www/html/ollama.users
+    ${SUDO} chmod 644 /var/www/html/ollama.users
+  }
+  if [ -d ssl ]; then
+    DIRS="sites-available snippets ssl"
+  else
+    DIRS="sites-available snippets"
+  fi
+  ${SUDO} tar cf /tmp/nginx$$.tar ${DIRS}
+  ${SUDO} tar -C /etc/nginx -xf /tmp/nginx$$.tar
+  ${SUDO} rm -f /tmp/nginx$$.tar
+  [ -d /etc/nginx/sites-available ] && ${SUDO} chown -R root:root /etc/nginx/sites-available
+  [ -d /etc/nginx/ssl ] && ${SUDO} chown -R root:root /etc/nginx/ssl
+  [ -d /etc/nginx/snippets ] && ${SUDO} chown -R root:root /etc/nginx/snippets
+  if [ -f ssl/server.key ]; then
+    ${SUDO} chmod 400 /etc/nginx/ssl/server.key
+  else
+    echo "Install /etc/nginx/ssl/server.key"
+    start_nginx=
+  fi
+  if [ -f ssl/server.crt ]; then
+    ${SUDO} chmod 400 /etc/nginx/ssl/server.crt
+  else
+    echo "Install /etc/nginx/ssl/server.crt"
+    start_nginx=
+  fi
+  ${SUDO} rm -f /etc/nginx/sites-enabled/default
+  [ -d /etc/nginx/sites-enabled ] || ${SUDO} mkdir -p /etc/nginx/sites-enabled
+  cd /etc/nginx/sites-enabled
+  for site in ../sites-available/*.neoman.dev
+  do
+    [ "${site}" == "../sites-available/*.neoman.dev" ] && continue
+    ${SUDO} rm -f $(basename "${site}")
+    ${SUDO} ln -s ${site} .
+  done
+  if [ "${start_nginx}" ]; then
+    ${SUDO} systemctl enable nginx
+    ${SUDO} systemctl start nginx
+  else
+    ${SUDO} systemctl stop nginx
+    ${SUDO} systemctl disable nginx
+  fi
+  cd "${SCRIPT_PATH}"
+}
+
+# Set permissions and ownership
+${SUDO} chown -R ${VLLM_USER}:${HB_GROUP} ${LLM_DATA}
+${SUDO} chmod 775 ${LLM_DATA}
+${SUDO} chown -R ${VLLM_USER}:${HB_GROUP} ${MNT_PT}
+${SUDO} chmod 775 ${MNT_PT}
+${SUDO} chown -R ${VLLM_USER}:${HB_GROUP} ${MNT_MODELS}
+${SUDO} chmod 775 ${MNT_MODELS}
+# Grant hbadmin access to vllm Home
+${SUDO} chown -R ${VLLM_USER}:${HB_GROUP} ${VLLM_HOME}
+${SUDO} chmod 775 ${VLLM_HOME}
+
+# Move hbadmin user's lmstudio and cache folders to mounted disk
+for folder in cache lmstudio
+do
+  if [ -d ${HOME}/.${folder} ]; then
+    ${SUDO} mv ${HOME}/.${folder} ${MNT_SHARE}/${folder}
+  else
+    ${SUDO} mkdir -p ${MNT_SHARE}/${folder}
+  fi
+  ${SUDO} chown -R ${HB_USER}:${VLLM_GROUP} ${MNT_SHARE}/${folder}
+  ${SUDO} chmod 775 ${MNT_SHARE}/${folder}
+  ${SUDO} ln -s ${MNT_SHARE}/${folder} ${HOME}/.${folder}
+done
+
+# Create log files and set permissions
+for service in comfyui lmstudio mcp ollama openterminal openwebui vllm
+do
+  VARLOG="${MNT_PT}/logs/${service}"
+  STDLOG="${VARLOG}/stdio.log"
+  ERRLOG="${VARLOG}/error.log"
+  [ -d ${VARLOG} ] || ${SUDO} mkdir -p ${VARLOG}
+  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} ${VARLOG}
+  ${SUDO} chmod 750 ${VARLOG}
+  [ -f ${STDLOG} ] || ${SUDO} touch ${STDLOG}
+  [ -f ${ERRLOG} ] || ${SUDO} touch ${ERRLOG}
+  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} ${STDLOG}
+  ${SUDO} chmod 640 ${STDLOG}
+  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} ${ERRLOG}
+  ${SUDO} chmod 640 ${ERRLOG}
+  ${SUDO} rm -rf /var/log/${service}
+  ${SUDO} ln -s ${VARLOG} /var/log/${service}
+done
+# ComfyUI, LM Studio, and Open Terminal are being run as hbadmin
+for service in comfyui lmstudio openterminal
+do
+  VARLOG="${MNT_PT}/logs/${service}"
+  STDLOG="${VARLOG}/stdio.log"
+  ERRLOG="${VARLOG}/error.log"
+  ${SUDO} chown ${HB_USER}:${VLLM_GROUP} "${VARLOG}"
+  ${SUDO} chown ${HB_USER}:${VLLM_GROUP} "${STDLOG}"
+  ${SUDO} chown ${HB_USER}:${VLLM_GROUP} "${ERRLOG}"
+done
+# Fixup log dir permissions
+${SUDO} chown ${VLLM_USER}:${HB_GROUP} "${LOGDIR}"
+${SUDO} chmod 775 "${LOGDIR}"
+
+if [ "${installVllm}" ]; then
+  # If vLLM installed then Ollama logs need owner Ollama
+  VARLOG="${MNT_PT}/logs/ollama"
+  STDLOG="${VARLOG}/stdio.log"
+  ERRLOG="${VARLOG}/error.log"
+  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} "${VARLOG}"
+  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} "${STDLOG}"
+  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} "${ERRLOG}"
+
+  # Download a model from Huggingface
+  echo ""
+  echo " ------------------------------------------------------ "
+  echo "| Downloading default vLLM models from Huggingface Hub |"
+  echo " ------------------------------------------------------ "
+  HF_MODEL_LIST="${SCRIPT_PATH}/models/hf-init-models.txt"
+  HF_PULL_LOG="${LOGDIR}/hf-init-models-download.log"
+  have_hfcli=$(type -p hf)
+  if [ "${have_hfcli}" ]; then
+    echo ""
+    echo "Huggingface Download Log" > ${HF_PULL_LOG}
+    echo "------------------------" >> ${HF_PULL_LOG}
+    if [ -f ${HF_MODEL_LIST} ]; then
+      while IFS= read -r hfmodel
+      do
+        dl_hf_model "${hfmodel}"
+      done < <(cat ${HF_MODEL_LIST} | grep -v "^#")
+    else
+      warn "Cannot locate huggingface models list file ${HF_MODEL_LIST}"
+      for hfmodel in Qwen/Qwen2.5-7B-Instruct Qwen/Qwen3.5-27B-GPTQ-Int4 Qwen/Qwen3.6-27B-FP8
+      do
+        dl_hf_model "${hfmodel}"
+      done
+    fi
+
+    echo ""
+    echo " ---------------------------------------------- "
+    echo "| Adding the Hugging Face CLI for Agents Skill |"
+    echo " ---------------------------------------------- "
+    hf skills add --force --global
+  else
+    erro "hf not found in PATH"
+    warn "vLLM default model not downloaded"
+  fi
+fi
+
+[ "${installStudio}" ] && {
+  # Add LM Studio bin to PATH
+  export PATH="${PATH}:/home/hbadmin/.lmstudio/bin"
+  # Download LM Studio service default models
+  LMSD_LOG="${LOGDIR}/lms-models-download.log"
+  echo "LM Studio Models Download Log" > ${LMSD_LOG}
+  echo "-----------------------------" >> ${LMSD_LOG}
+  have_lms=$(type -p lms)
+  if [ "${have_lms}" ]; then
+    echo ""
+    echo " -------------------------------------------------------------- "
+    echo "| Downloading LM Studio service models, this will take a while |"
+    echo " -------------------------------------------------------------- "
+    # Only download gpt-oss-20b for now
+    # Additional models can be downloaded post-install
+    for hf_model in gpt-oss-20b
+    do
+      nonl "Downloading ${hf_model} model for LM Studio ... "
+      echo "Downloading ${hf_model} model" >> ${LMSD_LOG}
+      lms get openai/${hf_model} --yes >> ${LMSD_LOG} 2>&1
+      echo "----------------------" >> ${LMSD_LOG}
+      printf "%b[done]%b\n" '\e[0;32m\033[1m' '\e[0m'
+    done
+  else
+    warn "Cannot locate lms command, LM Studio service models not downloaded"
+    echo "Cannot locate lms command, LM Studio service models not downloaded" >> ${LMSD_LOG}
+  fi
+
+  # Create symlink to LM Studio
+  [ -d ${LMSTUDIO_DIR} ] && ${SUDO} rm -rf ${LMSTUDIO_DIR}
+  ${SUDO} ln -s ${MNT_SHARE}/lmstudio ${LMSTUDIO_DIR}
+}
+
+${SUDO} chown -R ${VLLM_USER}:${HB_GROUP} ${MNT_PT}/.venv
+
+# Enable and start services
+for script in ${SCRIPT_PATH}/etc/*.service
+do
+  [ "${script}" == "${SCRIPT_PATH}/etc/*.service" ] && continue
+  scrname=$(basename "${script}")
+  case ${scrname} in
+    lmstudio*)
+      if [ "${installStudio}" ]; then
+          ${SUDO} systemctl enable ${scrname} > /dev/null 2>&1
+          ${SUDO} systemctl start ${scrname} > /dev/null 2>&1
+      else
+          ${SUDO} systemctl disable ${scrname} > /dev/null 2>&1
+          ${SUDO} systemctl stop ${scrname} > /dev/null 2>&1
+      fi
+      ;;
+    ollama*)
+      if [ "${installOllama}" ]; then
+          ${SUDO} systemctl enable ${scrname} > /dev/null 2>&1
+          ${SUDO} systemctl start ${scrname} > /dev/null 2>&1
+      else
+          ${SUDO} systemctl disable ${scrname} > /dev/null 2>&1
+          ${SUDO} systemctl stop ${scrname} > /dev/null 2>&1
+      fi
+      ;;
+    vllm*)
+        if [ "${installVllm}" ]; then
+          ${SUDO} systemctl enable ${scrname} > /dev/null 2>&1
+          ${SUDO} systemctl start ${scrname} > /dev/null 2>&1
+        else
+          ${SUDO} systemctl disable ${scrname} > /dev/null 2>&1
+          ${SUDO} systemctl stop ${scrname} > /dev/null 2>&1
+        fi
+      ;;
+    *)
+      ${SUDO} systemctl enable ${scrname} > /dev/null 2>&1
+      ${SUDO} systemctl start ${scrname} > /dev/null 2>&1
+      ;;
+  esac
+done
+
+# Restart Nginx
+${SUDO} systemctl restart nginx
+
+if [ "${installOllama}" ]; then
+  have_ollama=$(type -p ollama)
+  if [ "${have_ollama}" ]; then
+    pull_models
+  else
+    erro "Ollama not found. Correct errors in 'curl -fSL https://ollama.com/install.sh | sh'"
+  fi
+fi
+
+# Get status of newly installed systemd services
+have_check=$(type -p check-services)
+[ "${have_check}" ] && check-services
+
+${SUDO} shutdown -r now

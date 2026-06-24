@@ -1,0 +1,17 @@
+[Unit]
+Description=Ollama Service
+After=network-online.target
+
+[Service]
+Type=simple
+User=vllm
+Group=vllm
+EnvironmentFile=/home/vllm/env
+ExecStart=/usr/local/bin/ollama serve
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/ollama/stdio.log
+StandardError=append:/var/log/ollama/error.log
+
+[Install]
+WantedBy=multi-user.target

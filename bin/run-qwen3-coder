@@ -1,0 +1,9 @@
+#!/bin/bash
+
+have_oll=$(type -p ollama)
+if [ "${have_oll}" ]; then
+  ollama run qwen3-coder:30b
+else
+  echo "ERROR: cannot locate ollama command"
+  exit 1
+fi

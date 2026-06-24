@@ -1,0 +1,15 @@
+#!/bin/bash
+
+MNT_PT="/mnt/llm"
+PYENV_ROOT="${MNT_PT}/.venv"
+export PATH="${PYENV_ROOT}/bin:${PATH}"
+
+[ -d ${MNT_PT}/ComfyUI ] || {
+  echo "ERROR: ${MNT_PT}/ComfyUI does not exist or is not a directory"
+  exit 1
+}
+
+source ${PYENV_ROOT}/bin/activate
+
+cd ${MNT_PT}/ComfyUI
+python main.py

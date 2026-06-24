@@ -1,0 +1,15 @@
+# Ollama models to download, one per line:
+deepseek-v3.2:cloud
+deepseek-v4-pro:cloud
+gemma4:e4b
+glm-5.1:cloud
+kimi-k2.7-code:cloud
+llama3-groq-tool-use:8b
+llama3.2:3b
+mistral:instruct
+mistral-medium-3.5
+phi4:14b
+qwen2.5-coder:7b
+qwen3-coder:30b
+qwen3.6:27b
+SetneufPT/Gemma4-12B_Q4_64K_16GB-GPU:latest

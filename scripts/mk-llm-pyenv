@@ -1,0 +1,12 @@
+#!/bin/bash
+
+MYLLM_ROOT="/usr/local/share/llm"
+export PYENV_ROOT="${MYLLM_ROOT}/venv"
+
+[ -d ${MYLLM_ROOT} ] || sudo mkdir -p ${MYLLM_ROOT}
+
+sudo chmod 777 ${MYLLM_ROOT}
+
+curl --silent https://pyenv.run | bash
+
+sudo chmod 755 ${MYLLM_ROOT}
