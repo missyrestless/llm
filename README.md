@@ -45,6 +45,8 @@ The `.secrets` file contains the following settings:
 GH_TOKEN='<REDACTED>'
 # A Huggingface token
 HF_TOKEN='<REDACTED>'
+# The Open Terminal user password
+TERM_PASS='<REDACTED>'
 ```
 
 To install:
@@ -118,7 +120,7 @@ Access to Open WebUI is controlled via password authentication.
 The following hostnames have been adopted for this deployment:
 
 - `openwebui.neoman.dev` serves as the primary web user interface
-  - Login with Okta credentials at https://openwebui.neoman.dev
+  - Login with username/password at https://openwebui.neoman.dev
 - `mcp.neoman.dev` serves as the HTTPS protocol server for MCP servers 
 - `openai.neoman.dev` serves as the OpenAI-Compatible server for locally hosted OpenAI requests
   - An API key is required to make requests
@@ -231,7 +233,7 @@ for more notes on installing and using local models.
 to operate entirely offline. It supports Ollama and OpenAI-compatible APIs, making it a powerful,
 provider-agnostic solution for both local and cloud-based models.
 
-The `install` script installs and configures Open WebUI with Ollama integration and Okta authentication.
+The `install` script installs and configures Open WebUI with Ollama and vLLM integration.
 Open WebUI is configured to run securely behind an Nginx reverse proxy.
 
 ### Ollama and Open WebUI
