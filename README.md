@@ -8,13 +8,10 @@ it with `Ollama`, `vLLM`, self-hosted large language models, and tools.
 - [Installation](#installation)
   - [Installation Usage and Configuration](#installation-usage-and-configuration)
   - [Access and Hostnames](#access-and-hostnames)
-- [What is the Model Context Protocol](#what-is-the-model-context-protocol)
-- [Building an MCP server](#building-an-mcp-server)
 - [Installing and using a Large Language Model](#installing-and-using-a-large-language-model)
   - [Installing and using a local LLM with Ollama](#installing-and-using-a-local-llm-with-ollama)
     - [Ollama README](doc/README-OLLAMA.md)
   - [Installing and using a local LLM with the LLM command line](#installing-and-using-a-local-llm-with-the-llm-command-line)
-- [MCP Integration with a Local LLM](doc/MCP-Integration.md)
 - [Open WebUI](#open-webui)
   - [Open WebUI Workspace Models](models/README.md)
   - [Ollama and Open WebUI](#ollama-and-open-webui)
@@ -30,6 +27,7 @@ it with `Ollama`, `vLLM`, self-hosted large language models, and tools.
   - [Models README](models/README.md)
   - [OpenClaw doc](doc/OpenClaw.md)
   - [Ollama CLI reference](doc/OLLAMA-CLI-REF.md)
+  - [What is the Model Context Protocol](doc/MCP.md)
   - [WrenAI and Open WebUI integration](doc/WrenAI-OpenWebUI.md)
 - [See also](#see-also)
 
@@ -63,20 +61,23 @@ chmod 600 .secrets
 The `install` script provides automated installation and configuration of:
 
 - Open WebUI
+- Open Terminal
 - Ollama
   - Ollama models
 - vLLM
   - Huggingface models
 - LM Studio CLI
 - Huggingface Hub
-- Llama.cpp
+- ComfyUI image generation
 - llm CLI
 - Claude Code
 - Additional tools
 - Nginx reverse proxy
 - Systemd system services
+  - comfyui.service
   - lmstudio.service
   - ollama.service
+  - openterminal.service
   - openwebui.service
   - vllm.service
 
@@ -149,23 +150,6 @@ Not yet deployed:
 - 8002   : Second vLLM server
 - 10000  : Llama.cpp
 - 18789  : OpenClaw
-
-## What is the Model Context Protocol
-
-`MCP` (Model Context Protocol) is an open-source standard for connecting AI applications to external systems.
-
-Using `MCP`, AI applications like Claude or ChatGPT can connect to data sources (e.g. local files, databases),
-tools (e.g. search engines, calculators) and workflows (e.g. specialized prompts) — enabling them to access
-key information and perform tasks.
-
-Think of `MCP` like a USB-C port for AI applications. Just as USB-C provides a standardized way to connect
-electronic devices, `MCP` provides a standardized way to connect AI applications to external systems.
-
-See https://modelcontextprotocol.io/docs/getting-started/intro
-
-##  Building an MCP server
-
-An example of building an MCP server using Go is detailed in [doc/README-GO.md](doc/README-GO.md).
 
 ## Installing and using a Large Language Model
 
@@ -369,17 +353,10 @@ By completing these steps, you’ll have successfully integrated ComfyUI with Op
   - [vLLM Quick Start Guide](https://docs.vllm.ai/en/stable/getting_started/quickstart)
   - [Install vLLM on Ubuntu Linux for Production](https://computingforgeeks.com/install-vllm-linux-production)
 - [Ollama vs vLLM](https://medium.com/@mustafa.gencc94/ollama-vs-vllm-a-comprehensive-guide-to-local-llm-serving-91705ec50c1d) (Medium article)
-- [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro)
-  - [Connect to local MCP servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers)
-  - [Connect to remote MCP servers](https://modelcontextprotocol.io/docs/develop/connect-remote-servers)
-  - [Official Go SDK for MCP servers and clients](https://github.com/modelcontextprotocol/go-sdk)
-  - [Using MCP with a Local LLM](https://medium.com/predict/using-the-model-context-protocol-mcp-with-a-local-llm-e398d6f318c3) (Medium article)
-  - [MCP Toolbox for Databases](https://vibehackers.io/mcp/mcp-toolbox)
 - [Claude](https://claude.ai)
   - [Claude Code Quickstart](https://code.claude.com/docs/en/quickstart)
   - [Building custom Claude connectors](https://claude.com/docs/connectors/building)
   - [Open WebUI Claude Code Pipe](https://github.com/tfriedel/openwebui-claude-code)
-  - [Connect Claude to Salesforce](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/claude.html)
 - [OpenClaw](https://openclaw.ai)
   - [Connect OpenClaw to Open WebUI](https://docs.openwebui.com/getting-started/quick-start/connect-an-agent/openclaw)
   - [Hardening OpenClaw](https://docs.openclaw.ai/security)

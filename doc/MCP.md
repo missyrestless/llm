@@ -1,4 +1,36 @@
-# MCP Integration with a Local LLM
+# Model Context Protocol (MCP)
+
+`MCP` (Model Context Protocol) is an open-source standard for connecting AI applications to external systems.
+
+## Table of Contents
+
+- [What is the Model Context Protocol](#what-is-the-model-context-protocol)
+- [Building an MCP server](#building-an-mcp-server)
+- [MCP Integration with a Local LLM](#mcp-integration-with-a-local-llm)
+- [Ollama MCP client](#ollama-mcp-client)
+- [Example deployment of MCP with a local LLM](#example-deployment-of-mcp-with-a-local-llm)
+  - [Getting started](#getting-started)
+  - [Implement the tools](#implement-the-tools)
+  - [Create an MCP client](#create-an-mcp-client)
+  - [Utility functions](#utility-functions)
+- [See Also](#see-also)
+
+## What is the Model Context Protocol
+
+Using `MCP`, AI applications like Claude or ChatGPT can connect to data sources (e.g. local files, databases),
+tools (e.g. search engines, calculators) and workflows (e.g. specialized prompts) — enabling them to access
+key information and perform tasks.
+
+Think of `MCP` like a USB-C port for AI applications. Just as USB-C provides a standardized way to connect
+electronic devices, `MCP` provides a standardized way to connect AI applications to external systems.
+
+See https://modelcontextprotocol.io/docs/getting-started/intro
+
+##  Building an MCP server
+
+An example of building an MCP server using Go is detailed in [README-GO.md](README-GO.md).
+
+## MCP Integration with a Local LLM
 
 In order to integrate `Ollama` with MCP a bridge (client) is required. Several exist, we use
 the MCP client for `ollama` at https://github.com/jonigl/mcp-client-for-ollama
@@ -6,16 +38,7 @@ the MCP client for `ollama` at https://github.com/jonigl/mcp-client-for-ollama
 **[Note:]** the `ollmcp` Ollama MCP client is installed as part of the Pip packages installed
 by the `install` script in this repository.
 
-## Table of Contents
-
-- [Introduction](#introduction)
-- [Example deployment of MCP with a local LLM](#example-deployment-of-mcp-with-a-local-llm)
-  - [Getting started](#getting-started)
-  - [Implement the tools](#implement-the-tools)
-  - [Create an MCP client](#create-an-mcp-client)
-  - [Utility functions](#utility-functions)
-
-## Introduction
+## Ollama MCP client
 
 The `ollmcp` Ollama MCP client can be used to connect to your MCP server with a script like:
 
@@ -295,3 +318,12 @@ if start_marker in last_line and end_marker in last_line:
 ```
 
 If everything went right, the MCP server’s response should contain the contents of the directory.
+
+## See Also
+
+- [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro)
+- [Connect to local MCP servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers)
+- [Connect to remote MCP servers](https://modelcontextprotocol.io/docs/develop/connect-remote-servers)
+- [Official Go SDK for MCP servers and clients](https://github.com/modelcontextprotocol/go-sdk)
+- [Using MCP with a Local LLM](https://medium.com/predict/using-the-model-context-protocol-mcp-with-a-local-llm-e398d6f318c3) (Medium article)
+- [MCP Toolbox for Databases](https://vibehackers.io/mcp/mcp-toolbox)
