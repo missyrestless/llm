@@ -10,24 +10,17 @@ Reminders for myself of what I need to do.
 * LM Studio (llmster up/down) start/stop script and systemd unit file
 * Combine all uncommitted secrets in one file, e.g. .private or .secrets
 * Install vLLM and connect to Open WebUI
-* Remove vllm user/group from starting snapshot
 * Auto configure vLLM connection to Open WebUI
 * Install and configure open-terminal, connect to Open WebUI
 
 ## TODO
 
 - Write up post-installation configuration details
-- Try running a small model with Ollama for MCP access and a large model with vLLM
-  - e.g. Qwen2.5-7B-Instruct with Ollama and Qwen3.6-27B-FP8 with vLLM
-  - divide GPU 30/70 between Ollama/vLLM
-- Find quantized models for Ollama
-- Is the Okta auth token expiring or not getting refreshed?
 - Add support for oikb, the Open WebUI knowledge base sync: https://github.com/open-webui/oikb
 - Check out LiteLLM https://docs.litellm.ai Proxy gateway
   - Integrate LiteLLM with Open WebUI https://docs.litellm.ai/docs/tutorials/openweb_ui
 - LlamaIndex setup
 - WrenAI setup
-- Licenses & API keys for Claude/OpenAI/etc
 
 ## Models to consider using
 
