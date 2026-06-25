@@ -1,0 +1,150 @@
+#!/bin/bash
+#
+# uninstall - automated removal of Ollama, Open WebUI, llm CLI, Nginx reverse proxy,
+#             LM Studio CLI, Huggingface Hub, llama.cpp, system services, models,
+#             Claude Code, and additional tools
+#
+# Written by Missy Restless (missyrestless@gmail.com) June, 2026
+#
+# Mount point for 2nd drive
+MNT_PT="/mnt/llm"
+
+if [[ $EUID -eq 0 ]]
+then
+  SUDO=
+else
+  SUDO=sudo
+fi
+
+LLM_SHARE="/usr/local/share"
+LLM_HOME="${LLM_SHARE}/llm"
+# Mounted share
+MNT_SHARE="${MNT_PT}/share"
+LLM_DATA="${MNT_SHARE}/data"
+# Huggingface mounted home
+HF_MNT_HOME="${MNT_SHARE}/hf"
+
+### Ollama, Open WebUI, and vLLM share the same user/group
+VLLM_HOME="/home/vllm"
+VLLM_USER="vllm"
+VLLM_GROUP="vllm"
+### A non-privileged user is used by Open Terminal
+TERM_HOME="/home/terminal"
+TERM_USER="terminal"
+TERM_GROUP="terminal"
+# Allow this user to read and write in protected folders
+MY_USER=$(id -u -n)
+MY_GROUP=$(id -g -n)
+
+# Models folder on separate disk
+export MNT_MODELS="${MNT_SHARE}/models"
+
+# Model folders
+MODELS_DIR="${LLM_HOME}/models"
+SHARE_MODELS="${LLM_SHARE}/models"
+LMSTUDIO_DIR="${LLM_SHARE}/lmstudio"
+# Where to install Python scripts' front-ends
+LLM_BIN="/usr/local/bin"
+# Where to install systemd units' start scripts
+LLM_SBIN="/usr/local/sbin"
+
+SCRIPT_PATH="$(
+  cd "$(dirname "$0")"
+  pwd -P
+)"
+have_real=$(type -p realpath)
+[ "${have_real}" ] && SCRIPT_PATH="$(realpath $SCRIPT_PATH)"
+
+cd "${SCRIPT_PATH}"
+# Remove Ollama
+${SUDO} systemctl stop ollama
+${SUDO} systemctl disable ollama
+${SUDO} rm -f /etc/systemd/system/ollama.service
+command -v ollama > /dev/null && {
+  ${SUDO} rm -f $(command -v ollama)
+}
+${SUDO} rm -rf /usr/share/ollama
+${SUDO} userdel ollama
+${SUDO} groupdel ollama
+# Uninstall llm CLI plugins
+llm uninstall llm-gpt4all -y
+# Uninstall pipx packages
+pipx uninstall llm
+pipx uninstall strip-tags
+pipx uninstall ttok
+pipx uninstall symbex
+pipx uninstall openai
+pipx uninstall pyaml
+pipx uninstall mcp
+pipx uninstall ollmcp
+
+# Recreate user's cache folder
+${SUDO} rm -f ${HOME}/.cache
+${SUDO} mkdir -p ${HOME}/.cache
+${SUDO} chown ${MY_USER}:${MY_GROUP} ${HOME}/.cache
+${SUDO} chmod 755 ${HOME}/.cache
+
+# Remove service config folders
+${SUDO} rm -rf /etc/open-webui
+${SUDO} rm -rf /etc/mcp
+${SUDO} rm -rf /etc/vllm
+
+# Disable, stop, and remove services
+for script in ${SCRIPT_PATH}/etc/*.service
+do
+  [ "${script}" == "${SCRIPT_PATH}/etc/*.service" ] && continue
+  scrname=$(basename "${script}")
+  ${SUDO} systemctl disable ${scrname} > /dev/null 2>&1
+  ${SUDO} systemctl stop ${scrname} > /dev/null 2>&1
+  ${SUDO} rm -f /lib/systemd/system/${scrname}
+done
+
+${SUDO} rm -rf ${MNT_SHARE}/cache \
+               ${MNT_SHARE}/data \
+               ${MNT_SHARE}/hf \
+               ${MNT_SHARE}/lmstudio \
+               ${MNT_SHARE}/models
+
+${SUDO} rm -rf ${MNT_PT}/.venv
+${SUDO} rm -rf ${MNT_PT}/ComfyUI ${MNT_PT}/logs
+${SUDO} rm -f ${MNT_PT}/models
+${SUDO} rmdir ${MNT_PT}/share
+
+${SUDO} rm -f ${LMSTUDIO_DIR}
+${SUDO} rm -f ${SHARE_MODELS}
+
+for log in comfyui mcp lmstudio vllm openterminal openwebui ollama vllm
+do
+  ${SUDO} rm -f /var/log/${log}
+done
+
+# Remove service users
+${SUDO} deluser ${VLLM_USER} ${MY_GROUP}
+${SUDO} deluser --remove-home ${TERM_USER}
+${SUDO} deluser --remove-home ${VLLM_USER}
+${SUDO} groupdel ${TERM_GROUP}
+${SUDO} groupdel ${VLLM_GROUP}
+
+# Remove systemd start scripts
+[ -d "${SCRIPT_PATH}"/sbin ] && {
+  cd "${SCRIPT_PATH}"/sbin
+  for script in *
+  do
+    [ "${script}" == "*" ] && continue
+    ${SUDO} rm -f "${LLM_SBIN}"/${script}
+  done
+}
+
+# Remove script front-ends
+[ -d "${SCRIPT_PATH}"/bin ] && {
+  cd "${SCRIPT_PATH}"/bin
+  for script in *
+  do
+    [ "${script}" == "*" ] && continue
+    ${SUDO} rm -f "${LLM_BIN}"/${script}
+  done
+}
+${SUDO} rm -f ${LLM_BIN}/chksvc
+
+${SUDO} rm -f ${LLM_HOME}
+${SUDO} rm -f ${LLM_SHARE}/data

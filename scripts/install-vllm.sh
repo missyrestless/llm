@@ -21,6 +21,9 @@ cd "${TOP}"
   exit 1
 }
 
+MY_USER=$(id -u -n)
+MY_GROUP=$(id -g -n)
+
 echo " ----------------- "
 echo "| Installing vLLM |"
 echo " ----------------- "
@@ -58,7 +61,7 @@ else
   sudo cp /tmp/vllm$$ /etc/vllm/env
 fi
 rm -f /tmp/vllm$$
-sudo chown vllm:hbadmin /etc/vllm/env
+sudo chown vllm:${MY_GROUP} /etc/vllm/env
 sudo chmod 640 /etc/vllm/env
 
 sudo -u vllm ${SCRIPT_PATH}/install-vllm-as-vllm.sh

@@ -88,7 +88,7 @@ pull_models() {
 
     [ "${installStudio}" ] && {
       # Add LM Studio bin to PATH
-      export PATH="${PATH}:/home/hbadmin/.lmstudio/bin"
+      export PATH="${PATH}:${HOME}/.lmstudio/bin"
       # Download LM Studio service large model
       LMSD_LOG="${LOGDIR}/lms-large-models-download.log"
       echo "LM Studio Large Models Download Log" > ${LMSD_LOG}
@@ -286,9 +286,9 @@ VLLM_GROUP="vllm"
 TERM_HOME="/home/terminal"
 TERM_USER="terminal"
 TERM_GROUP="terminal"
-# Allow the hbadmin user to read and write in protected folders
-HB_USER=$(id -u -n)
-HB_GROUP=$(id -g -n)
+# Allow this user to read and write in protected folders
+MY_USER=$(id -u -n)
+MY_GROUP=$(id -g -n)
 
 # Models folder on separate disk
 export MNT_MODELS="${MNT_SHARE}/models"
@@ -505,7 +505,7 @@ ${SUDO} apt install -q -y build-essential zlib1g-dev libssl-dev libncurses5-dev 
                           libgdbm-dev libnss3-dev libreadline-dev libffi-dev libsqlite3-dev \
                           libbz2-dev liblzma-dev tk-dev pkg-config wget curl git jq > /dev/null 2>&1
 
-# Allow other users to execute the uv installed tools in hbadmin HOME
+# Allow other users to execute the uv installed tools in this user's HOME
 chmod 755 ${HOME}
 # Make sure the install created the provider user and home directory
 grep -i "^${VLLM_GROUP}:" /etc/group > /dev/null || {
@@ -515,8 +515,8 @@ grep -i "^${VLLM_GROUP}:" /etc/group > /dev/null || {
 id "${VLLM_USER}" > /dev/null 2>&1 || {
   ${SUDO} useradd -r -s /bin/false -g ${VLLM_GROUP} -m -d ${VLLM_HOME} ${VLLM_USER}
 }
-# Add this user to the hbadmin group
-add_user_group "${VLLM_USER}" "${HB_GROUP}"
+# Add the vLLM user to this user's group
+add_user_group "${VLLM_USER}" "${MY_GROUP}"
 
 # Create the terminal user for Open Terminal
 id "${TERM_USER}" > /dev/null 2>&1 || {
@@ -549,7 +549,7 @@ ${SUDO} rm -rf ${VLLM_HOME}/hf
 ${SUDO} ln -s ${HF_MNT_HOME} ${VLLM_HOME}/hf
 
 [ -d ${LLM_HOME} ] || ${SUDO} ln -s ${MNT_PT} ${LLM_HOME}
-${SUDO} chown -R ${VLLM_USER}:${HB_GROUP} ${MNT_PT}
+${SUDO} chown -R ${VLLM_USER}:${MY_GROUP} ${MNT_PT}
 ${SUDO} chmod 775 ${MNT_PT}
 
 [ -d ${MNT_PYENV} ] && {
@@ -677,7 +677,7 @@ if [ "${installVllm}" ]; then
     ${SUDO} cp /tmp/vllm$$ /etc/vllm/env
   fi
   rm -f /tmp/vllm$$
-  ${SUDO} chown vllm:hbadmin /etc/vllm/env
+  ${SUDO} chown ${VLLM_USER}:${MY_GROUP} /etc/vllm/env
   ${SUDO} chmod 640 /etc/vllm/env
 
   if [ -x ${SCRIPT_PATH}/scripts/install-vllm-as-vllm.sh ]; then
@@ -704,7 +704,7 @@ if [ "${installOllama}" ]; then
     ${SUDO} cp /tmp/oenv$$ ${VLLM_HOME}/env
     rm -f /tmp/oenv$$
   fi
-  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} ${VLLM_HOME}/env
+  ${SUDO} chown ${VLLM_USER}:${MY_GROUP} ${VLLM_HOME}/env
   ${SUDO} chmod 640 ${VLLM_HOME}/env
   rm -f /tmp/owenv$$
 
@@ -834,8 +834,8 @@ grep -i "^${VLLM_GROUP}:" /etc/group > /dev/null || {
 id "${VLLM_USER}" > /dev/null 2>&1 || {
   ${SUDO} useradd -r -s /bin/false -g ${VLLM_GROUP} -m -d ${VLLM_HOME} ${VLLM_USER}
 }
-# Add this user to the hbadmin group
-add_user_group "${VLLM_USER}" "${HB_GROUP}"
+# Add the vLLM user to this user's group
+add_user_group "${VLLM_USER}" "${MY_GROUP}"
 
 # Install Open WebUI
 pip install "open-webui[all]" > ${LOGDIR}/install-open-webui.log 2>&1
@@ -876,7 +876,7 @@ else
 fi
 [ -d /etc/open-webui ] || ${SUDO} mkdir /etc/open-webui
 ${SUDO} cp /tmp/owenv$$ /etc/open-webui/env
-${SUDO} chown ${VLLM_USER}:${HB_GROUP} /etc/open-webui/env
+${SUDO} chown ${VLLM_USER}:${MY_GROUP} /etc/open-webui/env
 ${SUDO} chmod 640 /etc/open-webui/env
 rm -f /tmp/owenv$$
 
@@ -1050,17 +1050,17 @@ cd "${SCRIPT_PATH}"
 }
 
 # Set permissions and ownership
-${SUDO} chown -R ${VLLM_USER}:${HB_GROUP} ${LLM_DATA}
+${SUDO} chown -R ${VLLM_USER}:${MY_GROUP} ${LLM_DATA}
 ${SUDO} chmod 775 ${LLM_DATA}
-${SUDO} chown -R ${VLLM_USER}:${HB_GROUP} ${MNT_PT}
+${SUDO} chown -R ${VLLM_USER}:${MY_GROUP} ${MNT_PT}
 ${SUDO} chmod 775 ${MNT_PT}
-${SUDO} chown -R ${VLLM_USER}:${HB_GROUP} ${MNT_MODELS}
+${SUDO} chown -R ${VLLM_USER}:${MY_GROUP} ${MNT_MODELS}
 ${SUDO} chmod 775 ${MNT_MODELS}
-# Grant hbadmin access to vllm Home
-${SUDO} chown -R ${VLLM_USER}:${HB_GROUP} ${VLLM_HOME}
+# Grant this user access to vllm Home
+${SUDO} chown -R ${VLLM_USER}:${MY_GROUP} ${VLLM_HOME}
 ${SUDO} chmod 775 ${VLLM_HOME}
 
-# Move hbadmin user's lmstudio and cache folders to mounted disk
+# Move this user's lmstudio and cache folders to mounted disk
 for folder in cache lmstudio
 do
   if [ -d ${HOME}/.${folder} ]; then
@@ -1068,7 +1068,7 @@ do
   else
     ${SUDO} mkdir -p ${MNT_SHARE}/${folder}
   fi
-  ${SUDO} chown -R ${HB_USER}:${VLLM_GROUP} ${MNT_SHARE}/${folder}
+  ${SUDO} chown -R ${MY_USER}:${VLLM_GROUP} ${MNT_SHARE}/${folder}
   ${SUDO} chmod 775 ${MNT_SHARE}/${folder}
   ${SUDO} ln -s ${MNT_SHARE}/${folder} ${HOME}/.${folder}
 done
@@ -1080,29 +1080,29 @@ do
   STDLOG="${VARLOG}/stdio.log"
   ERRLOG="${VARLOG}/error.log"
   [ -d ${VARLOG} ] || ${SUDO} mkdir -p ${VARLOG}
-  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} ${VARLOG}
+  ${SUDO} chown ${VLLM_USER}:${MY_GROUP} ${VARLOG}
   ${SUDO} chmod 750 ${VARLOG}
   [ -f ${STDLOG} ] || ${SUDO} touch ${STDLOG}
   [ -f ${ERRLOG} ] || ${SUDO} touch ${ERRLOG}
-  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} ${STDLOG}
+  ${SUDO} chown ${VLLM_USER}:${MY_GROUP} ${STDLOG}
   ${SUDO} chmod 640 ${STDLOG}
-  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} ${ERRLOG}
+  ${SUDO} chown ${VLLM_USER}:${MY_GROUP} ${ERRLOG}
   ${SUDO} chmod 640 ${ERRLOG}
   ${SUDO} rm -rf /var/log/${service}
   ${SUDO} ln -s ${VARLOG} /var/log/${service}
 done
-# ComfyUI, LM Studio, and Open Terminal are being run as hbadmin
+# ComfyUI, LM Studio, and Open Terminal are being run as this user
 for service in comfyui lmstudio openterminal
 do
   VARLOG="${MNT_PT}/logs/${service}"
   STDLOG="${VARLOG}/stdio.log"
   ERRLOG="${VARLOG}/error.log"
-  ${SUDO} chown ${HB_USER}:${VLLM_GROUP} "${VARLOG}"
-  ${SUDO} chown ${HB_USER}:${VLLM_GROUP} "${STDLOG}"
-  ${SUDO} chown ${HB_USER}:${VLLM_GROUP} "${ERRLOG}"
+  ${SUDO} chown ${MY_USER}:${VLLM_GROUP} "${VARLOG}"
+  ${SUDO} chown ${MY_USER}:${VLLM_GROUP} "${STDLOG}"
+  ${SUDO} chown ${MY_USER}:${VLLM_GROUP} "${ERRLOG}"
 done
 # Fixup log dir permissions
-${SUDO} chown ${VLLM_USER}:${HB_GROUP} "${LOGDIR}"
+${SUDO} chown ${VLLM_USER}:${MY_GROUP} "${LOGDIR}"
 ${SUDO} chmod 775 "${LOGDIR}"
 
 if [ "${installVllm}" ]; then
@@ -1110,9 +1110,9 @@ if [ "${installVllm}" ]; then
   VARLOG="${MNT_PT}/logs/ollama"
   STDLOG="${VARLOG}/stdio.log"
   ERRLOG="${VARLOG}/error.log"
-  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} "${VARLOG}"
-  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} "${STDLOG}"
-  ${SUDO} chown ${VLLM_USER}:${HB_GROUP} "${ERRLOG}"
+  ${SUDO} chown ${VLLM_USER}:${MY_GROUP} "${VARLOG}"
+  ${SUDO} chown ${VLLM_USER}:${MY_GROUP} "${STDLOG}"
+  ${SUDO} chown ${VLLM_USER}:${MY_GROUP} "${ERRLOG}"
 
   # Download a model from Huggingface
   echo ""
@@ -1152,7 +1152,7 @@ fi
 
 [ "${installStudio}" ] && {
   # Add LM Studio bin to PATH
-  export PATH="${PATH}:/home/hbadmin/.lmstudio/bin"
+  export PATH="${PATH}:${HOME}/.lmstudio/bin"
   # Download LM Studio service default models
   LMSD_LOG="${LOGDIR}/lms-models-download.log"
   echo "LM Studio Models Download Log" > ${LMSD_LOG}
@@ -1183,7 +1183,7 @@ fi
   ${SUDO} ln -s ${MNT_SHARE}/lmstudio ${LMSTUDIO_DIR}
 }
 
-${SUDO} chown -R ${VLLM_USER}:${HB_GROUP} ${MNT_PT}/.venv
+${SUDO} chown -R ${VLLM_USER}:${MY_GROUP} ${MNT_PT}/.venv
 
 # Enable and start services
 for script in ${SCRIPT_PATH}/etc/*.service
