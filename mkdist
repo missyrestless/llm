@@ -18,15 +18,15 @@ cd "${SCRIPT_PATH}"
 
 cd ..
 
-tar cf - mcp/bin \
-         mcp/doc \
-         mcp/env* \
-         mcp/etc/nginx/sites-available \
-         mcp/etc/*.service \
-         mcp/install \
-         mcp/models \
-         mcp/scripts \
-         mcp/PORTS \
-         mcp/VERSION \
-         mcp/tests \
-         mcp/sbin | gzip -9 > mcp/mcp-${VERSION}-${RELEASE}.tar.gz
+tar cf - llm/bin \
+         llm/doc \
+         llm/env* \
+         llm/etc/nginx/sites-available \
+         llm/etc/*.service \
+         llm/install \
+         llm/models \
+         llm/scripts \
+         llm/PORTS \
+         llm/VERSION \
+         llm/tests \
+         llm/sbin | gzip -9 > llm/llm-${VERSION}-${RELEASE}.tar.gz
